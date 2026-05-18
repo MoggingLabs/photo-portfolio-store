@@ -1,23 +1,53 @@
 # This file is the source of truth for the photo-portfolio-store HTTP API.
 # TypeScript types regenerate from this spec via `pnpm codegen`.
 # Do not edit generated type files by hand.
+#
+# Conventions:
+# - Every operation has operationId, summary, and at least one tag.
+# - Bearer JWT auth is required for everything except /health, /, /v1/auth/*,
+#   and /v1/events/{id}/search/face (which uses an explicit consent_id).
+# - Operations marked `x-status: stub` are spec-only — the implementation
+#   lands in a subsequent issue. The drift check uses this to distinguish
+#   spec-only routes from implementation-backed routes.
+# - Error responses uniformly reference #/components/schemas/ErrorResponse.
+
 openapi: 3.1.0
 info:
   title: photo-portfolio-store
   version: 0.1.0
-  description: Photographer portfolio + print storefront API.
+  description: |
+    Photographer portfolio + print storefront API.
+
+    Bounded contexts: auth, events, media, search, catalog, commerce,
+    compliance, admin. Each operation declares its context via tag.
 servers:
   - url: http://localhost:4000
     description: local
 tags:
   - name: meta
     description: Service metadata and health endpoints.
+  - name: auth
+    description: Registration, login, refresh, passwordless flows.
+  - name: events
+    description: Event lifecycle, members, FTP credentials.
+  - name: media
+    description: Resumable photo uploads, photo retrieval.
+  - name: search
+    description: Bib, name, and face-based photo search.
+  - name: catalog
+    description: Per-event product catalog.
+  - name: commerce
+    description: Carts, checkout, orders, digital downloads.
+  - name: compliance
+    description: Biometric consent grants and revocations.
+  - name: admin
+    description: Admin-only audit log access.
+security: []
 paths:
   /health:
     get:
       operationId: getHealth
-      tags:
-        - meta
+      tags: [meta]
       summary: Liveness probe
       responses:
         '200':
@@ -29,8 +59,7 @@ paths:
   /:
     get:
       operationId: getRoot
-      tags:
-        - meta
+      tags: [meta]
       summary: Service root
       responses:
         '200':
@@ -39,24 +68,1617 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RootResponse'
+
+  /v1/auth/register:
+    post:
+      operationId: authRegister
+      tags: [auth]
+      summary: Register a new user
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created and authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/auth/login:
+    post:
+      operationId: authLogin
+      tags: [auth]
+      summary: Email/password login
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Tokens issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/auth/refresh:
+    post:
+      operationId: authRefresh
+      tags: [auth]
+      summary: Exchange refresh token for a new access token
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New tokens issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/auth/logout:
+    post:
+      operationId: authLogout
+      tags: [auth]
+      summary: Revoke the current refresh session
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Session revoked.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/auth/passwordless/request:
+    post:
+      operationId: authPasswordlessRequest
+      tags: [auth]
+      summary: Request a passwordless magic-link/code by email
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordlessRequest'
+      responses:
+        '202':
+          description: Request accepted; check email.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/auth/passwordless/verify:
+    post:
+      operationId: authPasswordlessVerify
+      tags: [auth]
+      summary: Verify a passwordless code and issue tokens
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordlessVerify'
+      responses:
+        '200':
+          description: Tokens issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/events:
+    get:
+      operationId: listEvents
+      tags: [events]
+      summary: List events visible to the caller
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/EventStatus' }
+      responses:
+        '200':
+          description: Paginated events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEvents'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: createEvent
+      tags: [events]
+      summary: Create a new event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        '201':
+          description: Event created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getEvent
+      tags: [events]
+      summary: Retrieve a single event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Event resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      operationId: updateEvent
+      tags: [events]
+      summary: Partially update an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventPatch'
+      responses:
+        '200':
+          description: Updated event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      operationId: deleteEvent
+      tags: [events]
+      summary: Soft-delete (archive) an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Event archived.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: publishEvent
+      tags: [events]
+      summary: Transition an event from draft to published
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Published event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/members:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: addEventMember
+      tags: [events]
+      summary: Add a member to an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventMemberCreate'
+      responses:
+        '201':
+          description: Member added.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventMember'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/members/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - in: path
+        name: userId
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    patch:
+      operationId: updateEventMember
+      tags: [events]
+      summary: Update an event member's role or split
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventMemberPatch'
+      responses:
+        '200':
+          description: Updated member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventMember'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      operationId: removeEventMember
+      tags: [events]
+      summary: Remove an event member
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Member removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/ftp-credentials:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: rotateEventFtpCredentials
+      tags: [events]
+      summary: Issue (rotate) FTP credentials for the event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Newly issued credentials. The password is returned ONCE.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FtpCredentialIssued'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/events/{eventId}/uploads/init:
+    parameters:
+      - in: path
+        name: eventId
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    post:
+      operationId: initUpload
+      tags: [media]
+      summary: Initialize a resumable multipart upload
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadInitRequest'
+      responses:
+        '201':
+          description: Upload session created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSession'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/uploads/{sessionId}/chunk/{partNumber}:
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - in: path
+        name: partNumber
+        required: true
+        schema: { type: integer, minimum: 1, maximum: 10000 }
+    post:
+      operationId: uploadChunk
+      tags: [media]
+      summary: Upload a single multipart chunk
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: Chunk accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadChunkAck'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/uploads/{sessionId}/complete:
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    post:
+      operationId: completeUpload
+      tags: [media]
+      summary: Finalize a multipart upload
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Upload completed; photo row created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Photo'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/uploads/{sessionId}:
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    delete:
+      operationId: abortUpload
+      tags: [media]
+      summary: Abort an in-flight upload
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Upload aborted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/photos:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: listEventPhotos
+      tags: [media]
+      summary: List photos in an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/PhotoStatus' }
+      responses:
+        '200':
+          description: Paginated photos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPhotos'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/photos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getPhoto
+      tags: [media]
+      summary: Retrieve a single photo with its derivatives
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Photo resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Photo'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/events/{id}/search/bib:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: searchByBib
+      tags: [search]
+      summary: Search photos by bib number
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BibSearchRequest'
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/search/name:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: searchByName
+      tags: [search]
+      summary: Search photos by participant name
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameSearchRequest'
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/events/{id}/search/face:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: searchByFace
+      tags: [search]
+      summary: Search photos by selfie (face embedding)
+      description: |
+        Uses an existing biometric consent_id instead of bearer auth.
+        The selfie image is never persisted.
+      x-status: stub
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FaceSearchRequest'
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/events/{id}/products:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: listEventProducts
+      tags: [catalog]
+      summary: List products for an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated products.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProducts'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: createEventProduct
+      tags: [catalog]
+      summary: Create a product for an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Product created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/cart:
+    post:
+      operationId: createCart
+      tags: [commerce]
+      summary: Create a cart for an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartCreate'
+      responses:
+        '201':
+          description: Cart created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/cart/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getCart
+      tags: [commerce]
+      summary: Retrieve a cart
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Cart resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/cart/{id}/items:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: addCartItem
+      tags: [commerce]
+      summary: Add an item to a cart
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartItemCreate'
+      responses:
+        '201':
+          description: Item added; cart returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/cart/{id}/checkout:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: checkoutCart
+      tags: [commerce]
+      summary: Convert a cart into an order and initiate payment
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '201':
+          description: Order created with payment intent details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getOrder
+      tags: [commerce]
+      summary: Retrieve an order
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Order resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/orders/{id}/downloads:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getOrderDownloads
+      tags: [commerce]
+      summary: List signed download URLs for a paid order
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Signed download links.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDownloads'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/consents/biometric:
+    post:
+      operationId: grantBiometricConsent
+      tags: [compliance]
+      summary: Grant biometric consent for face search in an event
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentGrantRequest'
+      responses:
+        '201':
+          description: Consent recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consent'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/consents/biometric/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    delete:
+      operationId: revokeBiometricConsent
+      tags: [compliance]
+      summary: Revoke a biometric consent; purges derived data
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Consent revoked. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/me/biometric-data:
+    get:
+      operationId: getMyBiometricData
+      tags: [compliance]
+      summary: Export the caller's biometric records
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Biometric records and consents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiometricExport'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/admin/audit-log:
+    get:
+      operationId: listAuditLog
+      tags: [admin]
+      summary: List audit log entries (admin-only)
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: eventId
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - in: query
+          name: actorUserId
+          schema: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Paginated audit entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLog'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/admin/audit-log.csv:
+    get:
+      operationId: exportAuditLogCsv
+      tags: [admin]
+      summary: Export audit log as CSV (admin-only)
+      x-status: stub
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: eventId
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: CSV stream.
+          content:
+            text/csv:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    Cursor:
+      in: query
+      name: cursor
+      schema:
+        type: string
+        description: Opaque cursor returned by a prior page.
+    Limit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Authenticated but not permitted.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Conflict with current resource state.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unprocessable:
+      description: Validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
   schemas:
+    Uuid:
+      type: string
+      format: uuid
+    Money:
+      type: object
+      required: [cents, currency]
+      properties:
+        cents:
+          type: integer
+          description: Smallest currency unit (e.g. USD cents).
+        currency:
+          type: string
+          description: ISO 4217 code.
+    Pagination:
+      type: object
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+            trace_id:
+              type: string
     HealthResponse:
       type: object
-      required:
-        - status
+      required: [status]
       properties:
         status:
           type: string
-          enum:
-            - ok
+          enum: [ok]
     RootResponse:
       type: object
-      required:
-        - name
-        - ok
+      required: [name, ok]
       properties:
-        name:
+        name: { type: string }
+        ok: { type: boolean }
+
+    UserRole:
+      type: string
+      enum: [superadmin, admin, photographer, organizer, assistant, attendee]
+    UserStatus:
+      type: string
+      enum: [active, suspended, deleted]
+    User:
+      type: object
+      required: [id, email, role, status, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        email: { type: string, format: email }
+        displayName: { type: string, nullable: true }
+        role: { $ref: '#/components/schemas/UserRole' }
+        status: { $ref: '#/components/schemas/UserStatus' }
+        createdAt: { type: string, format: date-time }
+    UserPublic:
+      type: object
+      required: [id, role]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string, nullable: true }
+        role: { $ref: '#/components/schemas/UserRole' }
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 12 }
+        displayName: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    PasswordlessRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    PasswordlessVerify:
+      type: object
+      required: [email, code]
+      properties:
+        email: { type: string, format: email }
+        code: { type: string }
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn:
+          type: integer
+          description: Access-token TTL in seconds.
+        user: { $ref: '#/components/schemas/User' }
+
+    EventStatus:
+      type: string
+      enum: [draft, published, archived]
+    EventMemberRole:
+      type: string
+      enum: [organizer, photographer, assistant]
+    Event:
+      type: object
+      required:
+        - id
+        - orgId
+        - name
+        - slug
+        - eventDate
+        - timezone
+        - status
+        - allowFaceSearch
+        - retentionDays
+        - currency
+        - createdAt
+        - updatedAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        orgId: { $ref: '#/components/schemas/Uuid' }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        eventDate: { type: string, format: date }
+        location: { type: string, nullable: true }
+        timezone: { type: string }
+        status: { $ref: '#/components/schemas/EventStatus' }
+        allowFaceSearch: { type: boolean }
+        retentionDays: { type: integer, minimum: 1 }
+        currency: { type: string }
+        coverPhotoId:
+          oneOf:
+            - { $ref: '#/components/schemas/Uuid' }
+            - { type: 'null' }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        archivedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EventCreate:
+      type: object
+      required: [orgId, name, slug, eventDate]
+      properties:
+        orgId: { $ref: '#/components/schemas/Uuid' }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        eventDate: { type: string, format: date }
+        location: { type: string }
+        timezone: { type: string, default: UTC }
+        currency: { type: string, default: USD }
+        allowFaceSearch: { type: boolean, default: true }
+        retentionDays: { type: integer, default: 30, minimum: 1 }
+    EventPatch:
+      type: object
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        eventDate: { type: string, format: date }
+        location: { type: string, nullable: true }
+        timezone: { type: string }
+        currency: { type: string }
+        allowFaceSearch: { type: boolean }
+        retentionDays: { type: integer, minimum: 1 }
+        coverPhotoId: { $ref: '#/components/schemas/Uuid' }
+    EventMember:
+      type: object
+      required: [eventId, userId, role, splitPct, createdAt]
+      properties:
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        userId: { $ref: '#/components/schemas/Uuid' }
+        role: { $ref: '#/components/schemas/EventMemberRole' }
+        splitPct:
           type: string
-        ok:
-          type: boolean
+          description: Decimal as string (e.g. "33.33").
+        createdAt: { type: string, format: date-time }
+    EventMemberCreate:
+      type: object
+      required: [userId, role]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        role: { $ref: '#/components/schemas/EventMemberRole' }
+        splitPct: { type: string, default: "0.00" }
+    EventMemberPatch:
+      type: object
+      properties:
+        role: { $ref: '#/components/schemas/EventMemberRole' }
+        splitPct: { type: string }
+    FtpCredentialIssued:
+      type: object
+      required: [id, eventId, username, password, expiresAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        username: { type: string }
+        password:
+          type: string
+          description: Returned ONCE on rotation; never retrievable afterward.
+        expiresAt: { type: string, format: date-time }
+
+    UploadSessionStatus:
+      type: string
+      enum: [in_progress, completed, aborted, expired]
+    PhotoStatus:
+      type: string
+      enum: [processing, ready, hidden, failed, takedown]
+    DerivativeKind:
+      type: string
+      enum: [thumb, preview, web, full]
+    UploadInitRequest:
+      type: object
+      required: [originalFilename, contentType, totalBytes, chunkSizeBytes]
+      properties:
+        originalFilename: { type: string }
+        contentType: { type: string }
+        totalBytes:
+          type: integer
+          format: int64
+          minimum: 1
+        chunkSizeBytes:
+          type: integer
+          minimum: 1
+    UploadSession:
+      type: object
+      required:
+        - id
+        - eventId
+        - photographerUserId
+        - originalFilename
+        - contentType
+        - totalBytes
+        - chunksReceived
+        - chunkSizeBytes
+        - status
+        - expiresAt
+        - createdAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        photographerUserId: { $ref: '#/components/schemas/Uuid' }
+        originalFilename: { type: string }
+        contentType: { type: string }
+        totalBytes: { type: integer, format: int64 }
+        chunksReceived: { type: integer }
+        chunkSizeBytes: { type: integer }
+        status: { $ref: '#/components/schemas/UploadSessionStatus' }
+        expiresAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    UploadChunkAck:
+      type: object
+      required: [sessionId, partNumber, etag, chunksReceived]
+      properties:
+        sessionId: { $ref: '#/components/schemas/Uuid' }
+        partNumber: { type: integer }
+        etag: { type: string }
+        chunksReceived: { type: integer }
+    PhotoDerivative:
+      type: object
+      required: [id, photoId, kind, objectKey, bytes, width, height, watermarked, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        kind: { $ref: '#/components/schemas/DerivativeKind' }
+        objectKey: { type: string }
+        bytes: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        watermarked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    Photo:
+      type: object
+      required:
+        - id
+        - eventId
+        - photographerUserId
+        - originalBytes
+        - contentType
+        - status
+        - hidden
+        - featured
+        - createdAt
+        - updatedAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        photographerUserId: { $ref: '#/components/schemas/Uuid' }
+        uploadSessionId: { $ref: '#/components/schemas/Uuid' }
+        originalBytes: { type: integer, format: int64 }
+        contentType: { type: string }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        capturedAt: { type: string, format: date-time, nullable: true }
+        status: { $ref: '#/components/schemas/PhotoStatus' }
+        hidden: { type: boolean }
+        featured: { type: boolean }
+        takedownAt: { type: string, format: date-time, nullable: true }
+        derivatives:
+          type: array
+          items: { $ref: '#/components/schemas/PhotoDerivative' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PaginatedEvents:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        nextCursor: { type: string, nullable: true }
+    PaginatedPhotos:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Photo' }
+        nextCursor: { type: string, nullable: true }
+    PaginatedProducts:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        nextCursor: { type: string, nullable: true }
+    PaginatedAuditLog:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLogEntry' }
+        nextCursor: { type: string, nullable: true }
+
+    MatchSource:
+      type: string
+      enum: [bib, name, face, text, hybrid]
+    SearchMatch:
+      type: object
+      required: [photoId, score, source, rank]
+      properties:
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        score: { type: number, format: float }
+        source: { $ref: '#/components/schemas/MatchSource' }
+        rank: { type: integer }
+        photo: { $ref: '#/components/schemas/Photo' }
+    SearchResults:
+      type: object
+      required: [sessionId, matches]
+      properties:
+        sessionId: { $ref: '#/components/schemas/Uuid' }
+        matches:
+          type: array
+          items: { $ref: '#/components/schemas/SearchMatch' }
+    BibSearchRequest:
+      type: object
+      required: [bib]
+      properties:
+        bib: { type: string }
+    NameSearchRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+    FaceSearchRequest:
+      type: object
+      required: [consentId, selfie]
+      properties:
+        consentId: { $ref: '#/components/schemas/Uuid' }
+        selfie:
+          type: string
+          format: binary
+
+    ProductKind:
+      type: string
+      enum: [digital_single, digital_bundle, foto_flat, print]
+    Product:
+      type: object
+      required:
+        - id
+        - eventId
+        - kind
+        - sku
+        - name
+        - priceCents
+        - currency
+        - licenseTierId
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        kind: { $ref: '#/components/schemas/ProductKind' }
+        sku: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        priceCents: { type: integer }
+        currency: { type: string }
+        licenseTierId: { $ref: '#/components/schemas/Uuid' }
+        configJsonb:
+          type: object
+          additionalProperties: true
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProductCreate:
+      type: object
+      required: [kind, sku, name, priceCents, currency, licenseTierId]
+      properties:
+        kind: { $ref: '#/components/schemas/ProductKind' }
+        sku: { type: string }
+        name: { type: string }
+        description: { type: string }
+        priceCents: { type: integer, minimum: 0 }
+        currency: { type: string }
+        licenseTierId: { $ref: '#/components/schemas/Uuid' }
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        configJsonb:
+          type: object
+          additionalProperties: true
+
+    CartStatus:
+      type: string
+      enum: [active, converted, expired, abandoned]
+    CartItem:
+      type: object
+      required:
+        - id
+        - cartId
+        - productId
+        - licenseTierId
+        - quantity
+        - unitPriceCents
+        - currency
+        - createdAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        cartId: { $ref: '#/components/schemas/Uuid' }
+        productId: { $ref: '#/components/schemas/Uuid' }
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        licenseTierId: { $ref: '#/components/schemas/Uuid' }
+        quantity: { type: integer, minimum: 1 }
+        unitPriceCents: { type: integer }
+        currency: { type: string }
+        createdAt: { type: string, format: date-time }
+    Cart:
+      type: object
+      required:
+        - id
+        - eventId
+        - currency
+        - status
+        - expiresAt
+        - items
+        - createdAt
+        - updatedAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        userId: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        currency: { type: string }
+        status: { $ref: '#/components/schemas/CartStatus' }
+        expiresAt: { type: string, format: date-time }
+        convertedAt: { type: string, format: date-time, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CartItem' }
+        subtotalCents: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CartCreate:
+      type: object
+      required: [eventId]
+      properties:
+        eventId: { $ref: '#/components/schemas/Uuid' }
+    CartItemCreate:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { $ref: '#/components/schemas/Uuid' }
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        licenseTierId: { $ref: '#/components/schemas/Uuid' }
+        quantity: { type: integer, minimum: 1, default: 1 }
+    CheckoutRequest:
+      type: object
+      required: [buyerEmail]
+      properties:
+        buyerEmail: { type: string, format: email }
+    CheckoutResponse:
+      type: object
+      required: [order, paymentIntentClientSecret]
+      properties:
+        order: { $ref: '#/components/schemas/Order' }
+        paymentIntentClientSecret: { type: string }
+    OrderStatus:
+      type: string
+      enum: [pending_payment, paid, partially_refunded, refunded, failed, cancelled]
+    OrderItem:
+      type: object
+      required:
+        - id
+        - orderId
+        - productId
+        - licenseTierId
+        - quantity
+        - unitPriceCents
+        - lineTotalCents
+        - currency
+        - createdAt
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        orderId: { $ref: '#/components/schemas/Uuid' }
+        productId: { $ref: '#/components/schemas/Uuid' }
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        licenseTierId: { $ref: '#/components/schemas/Uuid' }
+        quantity: { type: integer }
+        unitPriceCents: { type: integer }
+        lineTotalCents: { type: integer }
+        currency: { type: string }
+        metadataJsonb:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+    Order:
+      type: object
+      required:
+        - id
+        - cartId
+        - eventId
+        - buyerEmail
+        - subtotalCents
+        - taxCents
+        - totalCents
+        - currency
+        - status
+        - placedAt
+        - updatedAt
+        - items
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        cartId: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        buyerEmail: { type: string, format: email }
+        buyerUserId: { $ref: '#/components/schemas/Uuid' }
+        subtotalCents: { type: integer }
+        taxCents: { type: integer }
+        totalCents: { type: integer }
+        currency: { type: string }
+        stripePaymentIntentId: { type: string, nullable: true }
+        stripeChargeId: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        placedAt: { type: string, format: date-time }
+        paidAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+    OrderDownloadLink:
+      type: object
+      required: [photoId, url, expiresAt]
+      properties:
+        photoId: { $ref: '#/components/schemas/Uuid' }
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+    OrderDownloads:
+      type: object
+      required: [orderId, downloads]
+      properties:
+        orderId: { $ref: '#/components/schemas/Uuid' }
+        downloads:
+          type: array
+          items: { $ref: '#/components/schemas/OrderDownloadLink' }
+
+    ConsentScope:
+      type: string
+      enum: [biometric, marketing, terms_of_service, privacy_policy]
+    ConsentJurisdiction:
+      type: string
+      enum: [eu_gdpr, br_lgpd, us_bipa, us_ccpa, other]
+    Consent:
+      type: object
+      required: [id, scope, grantedAt, jurisdiction, consentVersion, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        scope: { $ref: '#/components/schemas/ConsentScope' }
+        subjectId: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        grantedAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        retentionUntil: { type: string, format: date-time, nullable: true }
+        jurisdiction: { $ref: '#/components/schemas/ConsentJurisdiction' }
+        consentVersion: { type: string }
+        createdAt: { type: string, format: date-time }
+    ConsentGrantRequest:
+      type: object
+      required: [eventId, jurisdiction, consentVersion]
+      properties:
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        jurisdiction: { $ref: '#/components/schemas/ConsentJurisdiction' }
+        consentVersion: { type: string }
+        locale: { type: string }
+    BiometricExport:
+      type: object
+      required: [consents, faceVectorCount]
+      properties:
+        consents:
+          type: array
+          items: { $ref: '#/components/schemas/Consent' }
+        faceVectorCount: { type: integer }
+
+    AuditActorKind:
+      type: string
+      enum: [user, system, cron, admin, webhook]
+    AuditLogEntry:
+      type: object
+      required: [id, actorKind, action, createdAt]
+      properties:
+        id:
+          type: string
+          description: Bigint id encoded as string.
+        actorUserId: { $ref: '#/components/schemas/Uuid' }
+        actorKind: { $ref: '#/components/schemas/AuditActorKind' }
+        action: { type: string }
+        targetKind: { type: string, nullable: true }
+        targetId: { type: string, nullable: true }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        ipHash: { type: string, nullable: true }
+        userAgent: { type: string, nullable: true }
+        payloadJsonb:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
