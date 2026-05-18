@@ -9,8 +9,10 @@ import adminAuditRoutes from './routes/admin/audit.js';
 import authPasswordlessRoutes from './routes/auth-passwordless.js';
 import authRoutes from './routes/auth.js';
 import cartRoutes from './routes/cart.js';
+import consentRoutes from './routes/consents.js';
 import eventsRoutes from './routes/events.js';
 import productsRoutes from './routes/products.js';
+import searchFaceRoutes from './routes/search-face.js';
 import searchRoutes from './routes/search.js';
 import uploadsRoutes from './routes/uploads.js';
 import { seedDefaultLicenseTiers } from './services/products.js';
@@ -68,6 +70,11 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(uploadsRoutes);
   await app.register(searchRoutes);
   await app.register(cartRoutes);
+  // F1.33 + F1.24 — biometric consent gate + selfie face search. Both
+  // anonymous-allowed and exempt from the RBAC startup check (they have
+  // their own consent/event gating, not RBAC).
+  await app.register(consentRoutes);
+  await app.register(searchFaceRoutes);
   await app.register(adminAuditRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));

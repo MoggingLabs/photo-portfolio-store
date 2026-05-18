@@ -12,9 +12,12 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   index,
+  integer,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -81,6 +84,15 @@ export const consents = app.table(
     evidenceJsonb: jsonb('evidence_jsonb').notNull(),
     // Policy version the subject agreed to, e.g. '2026-05-18'.
     consentVersion: text('consent_version').notNull(),
+    // F1.33 — soft-bind metadata for stolen-consent_id mitigation.
+    // sha256(IP); raw IP never stored.
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    // F1.33 — per-consent search quota (max 20 before re-consent required).
+    searchesUsed: integer('searches_used').notNull().default(0),
+    // F1.33 — TTL for biometric consents (grantedAt + 24h). Null = no expiry
+    // (terms_of_service / privacy_policy / marketing scopes).
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .default(sql`now()`),
@@ -155,9 +167,33 @@ export const auditLog = app.table(
   }),
 );
 
+// ---------- consent_policy_versions ----------
+// F1.33 — allow-list of biometric-consent policy texts. Server rejects any
+// grant carrying an unknown (version, locale) tuple. Seeded at boot from
+// apps/api src/lib/policy-versions.ts.
+
+export const consentPolicyVersions = app.table(
+  'consent_policy_versions',
+  {
+    version: text('version').notNull(),
+    locale: text('locale').notNull(),
+    title: text('title').notNull(),
+    bodyMarkdown: text('body_markdown').notNull(),
+    jurisdiction: text('jurisdiction').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.version, table.locale] }),
+  }),
+);
+
 // ---------- Grouped export ----------
 
 export const tables = {
   consents,
   auditLog,
+  consentPolicyVersions,
 };

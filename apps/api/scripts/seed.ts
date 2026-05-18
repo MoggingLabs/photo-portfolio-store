@@ -31,6 +31,30 @@ const { events, eventMembers, eventSettings } = schema.events.tables;
 const { photos, photoDerivatives } = schema.photos.tables;
 const { licenseTiers, products } = schema.catalog.tables;
 const { bibTags } = schema.search.tables;
+const { consentPolicyVersions } = schema.compliance.tables;
+
+// F1.33 — keep this list in sync with apps/api/src/lib/policy-versions.ts.
+// We don't import the runtime module here to keep this script side-effect
+// free, but the (version, locale) tuples MUST match.
+const POLICY_VERSION_SEED: ReadonlyArray<{
+  version: string;
+  locale: string;
+  title: string;
+  jurisdiction: string;
+}> = [
+  {
+    version: '2026-05-18',
+    locale: 'en-US',
+    title: 'Biometric processing consent',
+    jurisdiction: 'eu_gdpr',
+  },
+  {
+    version: '2026-05-18',
+    locale: 'pt-BR',
+    title: 'Consentimento para processamento biometrico',
+    jurisdiction: 'br_lgpd',
+  },
+];
 
 // ---------- Constants ----------
 
@@ -283,6 +307,29 @@ const run = async (): Promise<SeedSummary> => {
         });
         productCount += 1;
       }
+    }
+
+    // ----- 9b. Consent policy versions (F1.33) -----
+    for (const policy of POLICY_VERSION_SEED) {
+      const existing = await tx
+        .select({ version: consentPolicyVersions.version })
+        .from(consentPolicyVersions)
+        .where(
+          and(
+            eq(consentPolicyVersions.version, policy.version),
+            eq(consentPolicyVersions.locale, policy.locale),
+          ),
+        )
+        .limit(1);
+      if (existing[0]) continue;
+      await tx.insert(consentPolicyVersions).values({
+        version: policy.version,
+        locale: policy.locale,
+        title: policy.title,
+        jurisdiction: policy.jurisdiction,
+        bodyMarkdown: `# ${policy.title}\n\nSeed body. Source of truth: docs/compliance/policy-versions/${policy.version}/${policy.locale}.md`,
+        isActive: true,
+      });
     }
 
     // ----- 10. Bib tags (first 5 photos) -----

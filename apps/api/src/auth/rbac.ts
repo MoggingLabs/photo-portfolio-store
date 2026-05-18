@@ -87,6 +87,11 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   /^\/v1\/auth\//,
   /^\/docs(\/|$)/,
   /^\/openapi(\.json)?$/,
+  // F1.33 — biometric consent endpoints are anonymous-allowed and gated by
+  // their own consent + event checks, not RBAC.
+  /^\/v1\/consents\/biometric(\/.*)?$/,
+  // F1.24 — face search is anonymous-allowed and gated by biometric consent.
+  /^\/v1\/events\/[^/]+\/search\/face$/,
 ];
 
 // ---------- Helpers ----------
