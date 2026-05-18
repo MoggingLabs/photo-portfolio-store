@@ -22,9 +22,6 @@ def _auth_headers() -> dict[str, str]:
 @pytest.mark.parametrize(
     ("path", "expected_message"),
     [
-        ("/detect/", "Implemented in F1.18"),
-        ("/embed/", "Implemented in F1.18"),
-        ("/ocr-bib/", "Implemented in F1.19"),
         ("/quality/", "Implemented in F3.12"),
     ],
 )
@@ -34,24 +31,6 @@ def test_stub_routes_return_501(path: str, expected_message: str) -> None:
     body = response.json()
     assert body["error"] == "not_implemented"
     assert body["message"] == expected_message
-
-
-def test_detect_returns_501() -> None:
-    response = client.post("/detect/", files=_image_payload(), headers=_auth_headers())
-    assert response.status_code == 501
-    assert response.json()["error"] == "not_implemented"
-
-
-def test_embed_returns_501() -> None:
-    response = client.post("/embed/", files=_image_payload(), headers=_auth_headers())
-    assert response.status_code == 501
-    assert response.json()["error"] == "not_implemented"
-
-
-def test_ocr_bib_returns_501() -> None:
-    response = client.post("/ocr-bib/", files=_image_payload(), headers=_auth_headers())
-    assert response.status_code == 501
-    assert response.json()["error"] == "not_implemented"
 
 
 def test_quality_returns_501() -> None:

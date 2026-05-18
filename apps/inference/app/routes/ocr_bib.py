@@ -1,14 +1,19 @@
-"""Bib number OCR route. Stubbed; real implementation lands in F1.19."""
+"""Race-bib OCR route backed by PaddleOCR (F1.19)."""
+
+from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 
 from app.auth import require_api_key
-from app.routes._common import NotImplementedResponse
+from app.lib.bib_ocr import extract_bib_candidates, model_version
+from app.lib.image import ImageDecodeError, ImageTooLarge, decode_image
 
 logger = logging.getLogger(__name__)
+
+MAX_UPLOAD_BYTES = 16 * 1024 * 1024  # 16 MiB
 
 router = APIRouter(
     prefix="/ocr-bib",
@@ -17,20 +22,59 @@ router = APIRouter(
 )
 
 
-@router.post(
-    "/",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    response_model=NotImplementedResponse,
-)
-async def ocr_bib(image: UploadFile) -> JSONResponse:
-    """OCR race-bib numbers in an uploaded image.
+class BibDetection(BaseModel):
+    """A single OCR-recognised race bib in an uploaded image."""
 
-    Eventual response shape (F1.19):
-        {"bibs": [{"number": "1234", "confidence": 0.91, "bbox": [x, y, w, h]}, ...]}
-    """
-    logger.info("ocr_bib called with filename=%s (stub)", image.filename)
-    body = NotImplementedResponse(
-        error="not_implemented",
-        message="Implemented in F1.19",
+    bib_number: str = Field(..., description="Cleaned bib text, e.g. '1234' or 'A1234'.")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="OCR confidence score.")
+    bbox: list[list[float]] = Field(
+        ...,
+        description="Four [x, y] corner points of the detection polygon.",
     )
-    return JSONResponse(status_code=status.HTTP_501_NOT_IMPLEMENTED, content=body.model_dump())
+
+
+class OcrBibResponse(BaseModel):
+    """Response body for ``POST /ocr-bib/``."""
+
+    bibs: list[BibDetection]
+    model_version: str
+
+
+@router.post("/", response_model=OcrBibResponse)
+async def ocr_bib(image: UploadFile) -> OcrBibResponse:
+    """OCR race-bib numbers in an uploaded image."""
+    raw = await image.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        logger.warning(
+            "ocr_bib rejected oversize upload filename=%s size=%d",
+            image.filename,
+            len(raw),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"image exceeds {MAX_UPLOAD_BYTES} byte limit",
+        )
+
+    try:
+        image_bgr = decode_image(raw)
+    except ImageTooLarge as exc:
+        logger.warning("ocr_bib rejected oversize image filename=%s: %s", image.filename, exc)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except ImageDecodeError as exc:
+        logger.warning("ocr_bib rejected undecodable image filename=%s: %s", image.filename, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="unable to decode image",
+        ) from exc
+
+    candidates = extract_bib_candidates(image_bgr)
+    logger.info(
+        "ocr_bib filename=%s detected=%d", image.filename, len(candidates)
+    )
+    return OcrBibResponse(
+        bibs=[BibDetection(**c) for c in candidates],
+        model_version=model_version(),
+    )

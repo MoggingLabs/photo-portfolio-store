@@ -2,7 +2,7 @@
 name = "inference"
 version = "0.1.0"
 description = "Photo-portfolio-store face / bib / quality inference service"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -14,9 +14,25 @@ dependencies = [
     "opentelemetry-sdk>=1.28",
     "opentelemetry-exporter-otlp-proto-http>=1.28",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
+    # Image decoding (used by stubs and by face/ocr when those extras are installed).
+    "numpy>=2.1",
+    "pillow>=11.0",
+    "opencv-python-headless>=4.10",
 ]
 
 [project.optional-dependencies]
+# Heavy ML stacks are opt-in. They require platform-specific build tools
+# (MSVC on Windows for insightface; ~500MB paddlepaddle wheels) and are
+# always present in the production Docker image (Linux). For Windows / Mac
+# local development without these extras, the relevant endpoints return 503.
+face = [
+    "insightface>=0.7.3",
+    "onnxruntime>=1.20",
+]
+ocr = [
+    "paddleocr>=2.9",
+    "paddlepaddle>=2.6",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",

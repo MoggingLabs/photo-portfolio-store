@@ -3,11 +3,14 @@ import * as Sentry from '@sentry/node';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 
 import rbacPlugin from './auth/rbac.js';
+import { db } from './lib/db.js';
 import swaggerPlugin from './plugins/swagger.js';
 import adminAuditRoutes from './routes/admin/audit.js';
 import authRoutes from './routes/auth.js';
 import eventsRoutes from './routes/events.js';
+import productsRoutes from './routes/products.js';
 import uploadsRoutes from './routes/uploads.js';
+import { seedDefaultLicenseTiers } from './services/products.js';
 
 export const buildServer = async (): Promise<FastifyInstance> => {
   const logLevel = process.env.LOG_LEVEL ?? 'info';
@@ -45,9 +48,19 @@ export const buildServer = async (): Promise<FastifyInstance> => {
     await app.register(swaggerPlugin);
   }
 
+  // Idempotent seed (license tiers). Skipped in test env to keep test boot fast.
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      await seedDefaultLicenseTiers(db);
+    } catch (err) {
+      app.log.warn({ err }, 'license tier seed failed — continuing');
+    }
+  }
+
   // Routes
   await app.register(authRoutes);
   await app.register(eventsRoutes);
+  await app.register(productsRoutes);
   await app.register(uploadsRoutes);
   await app.register(adminAuditRoutes);
 

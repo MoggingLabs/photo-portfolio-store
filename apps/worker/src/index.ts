@@ -3,6 +3,9 @@ import { coreEnvSchema, parseEnv } from '@pkg/env';
 import * as Sentry from '@sentry/node';
 import pino, { type LoggerOptions } from 'pino';
 
+import { startSchedulers } from './jobs/index.js';
+import { startWorkers, stopWorkers } from './workers/index.js';
+
 const env = parseEnv(coreEnvSchema);
 
 const baseOptions: LoggerOptions = { level: env.LOG_LEVEL };
@@ -19,15 +22,27 @@ const loggerOptions: LoggerOptions =
 
 const logger = pino(loggerOptions);
 
-logger.info({ env: env.NODE_ENV }, 'worker booted; idle (queues land in M1)');
+const workers = startWorkers();
+const crons = startSchedulers();
 
-const shutdown = (signal: string): void => {
+logger.info(
+  { env: env.NODE_ENV, workers: Object.keys(workers), cronCount: crons.length },
+  'worker booted; processing queues',
+);
+
+const shutdown = async (signal: string): Promise<void> => {
   logger.info({ signal }, 'shutting down');
+  for (const cron of crons) cron.stop();
+  await stopWorkers(workers);
   process.exit(0);
 };
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
 
 process.on('uncaughtException', (error) => {
   Sentry.captureException(error);
@@ -38,9 +53,5 @@ process.on('unhandledRejection', (reason) => {
   Sentry.captureException(reason);
   throw reason;
 });
-
-setInterval(() => {
-  // heartbeat will be replaced by BullMQ workers in M1
-}, 60_000).unref();
 
 await new Promise<void>(() => {});

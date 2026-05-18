@@ -72,7 +72,8 @@
       "linter": {
         "rules": {
           "correctness": {
-            "noUnusedVariables": "off"
+            "noUnusedVariables": "off",
+            "noInvalidUseBeforeDeclaration": "off"
           },
           "style": {
             "noNonNullAssertion": "off"

@@ -17,6 +17,15 @@ COPY app ./app
 
 RUN uv pip install --system --no-cache .
 
+# Pre-download the InsightFace 'buffalo_l' model pack (~300 MB) into the
+# builder so the runtime image starts hot. Tradeoff: larger image vs no
+# cold-start download penalty on first /detect/ or /embed/ request.
+RUN python -c "from insightface.app import FaceAnalysis; m=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); m.prepare(ctx_id=0, det_size=(640,640))"
+
+# F1.19: pre-download PaddleOCR English detector + recognizer (~200 MB) so
+# /ocr-bib/ does not pay a cold-start download on the first request.
+RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', show_log=False)"
+
 # --- Stage 2: runtime -------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
@@ -34,8 +43,12 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app /app
+# Pre-baked InsightFace model pack (see builder stage).
+COPY --from=builder /root/.insightface /home/inference/.insightface
+# Pre-baked PaddleOCR model cache (see builder stage, F1.19).
+COPY --from=builder /root/.paddleocr /home/inference/.paddleocr
 
-RUN chown -R inference:inference /app
+RUN chown -R inference:inference /app /home/inference/.insightface /home/inference/.paddleocr
 USER inference
 
 EXPOSE 8000
