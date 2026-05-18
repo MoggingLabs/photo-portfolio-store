@@ -18,6 +18,15 @@ export const sentryEnvSchema = z.object({
 
 export type SentryEnv = z.infer<typeof sentryEnvSchema>;
 
+export const otelEnvSchema = z.object({
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_SERVICE_NAME: z.string().optional(),
+  OTEL_TRACES_SAMPLER: z.string().optional(),
+  OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
+});
+
+export type OtelEnv = z.infer<typeof otelEnvSchema>;
+
 export const parseEnv = <T extends z.ZodTypeAny>(
   schema: T,
   source: NodeJS.ProcessEnv = process.env,

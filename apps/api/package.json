@@ -16,6 +16,11 @@
     "@pkg/env": "workspace:*",
     "@pkg/shared": "workspace:*",
     "@sentry/node": "^8.45.0",
+    "@opentelemetry/sdk-node": "^0.55.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.53.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.55.0",
+    "@opentelemetry/resources": "^1.28.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
     "fastify": "^5.1.0",
     "@fastify/sensible": "^6.0.1",
     "zod": "^3.23.8"
