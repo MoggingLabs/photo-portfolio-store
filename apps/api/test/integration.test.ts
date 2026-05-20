@@ -198,6 +198,19 @@ vi.mock('@pkg/db', () => {
   };
 });
 
+// M2 trio side effects are wired into the webhook but exercised by their own
+// unit tests. Stub them so this M1 pipeline test stays focused and does not
+// pull the ledger/split modules into the shim layer.
+vi.mock('../src/services/order-split.js', () => ({
+  recordOrderSale: vi.fn(async () => undefined),
+}));
+vi.mock('../src/services/connect.js', () => ({
+  handleAccountUpdated: vi.fn(async () => undefined),
+}));
+vi.mock('../src/services/admin-refunds.js', () => ({
+  reconcileRefundFromWebhook: vi.fn(async () => undefined),
+}));
+
 vi.mock('drizzle-orm', () => {
   type Field = { column: string };
   const isField = (v: unknown): v is Field =>

@@ -6,6 +6,8 @@ import rbacPlugin from './auth/rbac.js';
 import { db } from './lib/db.js';
 import swaggerPlugin from './plugins/swagger.js';
 import adminAuditRoutes from './routes/admin/audit.js';
+import adminOrderSplitsRoutes from './routes/admin/order-splits.js';
+import adminRefundsRoutes from './routes/admin/refunds.js';
 import authPasswordlessRoutes from './routes/auth-passwordless.js';
 import authRoutes from './routes/auth.js';
 import bundlesRoutes from './routes/bundles.js';
@@ -14,6 +16,7 @@ import checkoutRoutes from './routes/checkout.js';
 import consentRoutes from './routes/consents.js';
 import downloadsRoutes from './routes/downloads.js';
 import eventsRoutes from './routes/events.js';
+import meKycRoutes from './routes/me-kyc.js';
 import pricingRoutes from './routes/pricing.js';
 import productsRoutes from './routes/products.js';
 import refundsRoutes from './routes/refunds.js';
@@ -98,6 +101,11 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(bundlesRoutes);
   // M2 F2.6 — buyer self-service refund requests (owner-gated within handler).
   await app.register(refundsRoutes);
+  // M2 F2.9 — Stripe Connect onboarding (self-service "me" routes).
+  await app.register(meKycRoutes);
+  // M2 F2.10 — admin order split view. M2 F2.7 — admin refund decision.
+  await app.register(adminOrderSplitsRoutes);
+  await app.register(adminRefundsRoutes);
   await app.register(adminAuditRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));

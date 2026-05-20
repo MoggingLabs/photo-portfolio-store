@@ -63,14 +63,41 @@ vi.mock('@pkg/db', () => {
     auditLog: tableMarker('auditLog'),
     consents: tableMarker('auditLog'),
   };
+  const payoutsTables = {
+    payoutAccounts: tableMarker('payoutAccounts'),
+    payouts: tableMarker('payouts'),
+    ledgerAccounts: tableMarker('ledgerAccounts'),
+    ledgerEntries: tableMarker('ledgerEntries'),
+  };
+  const photoTables = { photos: tableMarker('photos') };
+  const eventTables = {
+    events: tableMarker('events'),
+    eventMembers: tableMarker('eventMembers'),
+  };
   return {
     createDbClient: () => ({}),
     schema: {
       commerce: { tables: commerceTables },
       compliance: { auditLog: complianceTables.auditLog, tables: complianceTables },
+      payouts: { tables: payoutsTables },
+      photos: { tables: photoTables },
+      events: { tables: eventTables },
     },
   };
 });
+
+// The webhook delegates ledger/connect/refund side effects to these services,
+// which are exercised by their own unit tests. Stub them here so the webhook
+// test stays focused on dispatch + idempotency + status transitions.
+vi.mock('../src/services/order-split.js', () => ({
+  recordOrderSale: vi.fn(async () => undefined),
+}));
+vi.mock('../src/services/connect.js', () => ({
+  handleAccountUpdated: vi.fn(async () => undefined),
+}));
+vi.mock('../src/services/admin-refunds.js', () => ({
+  reconcileRefundFromWebhook: vi.fn(async () => undefined),
+}));
 
 vi.mock('drizzle-orm', () => {
   type Field = { column: string };

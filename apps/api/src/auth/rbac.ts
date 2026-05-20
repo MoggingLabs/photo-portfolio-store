@@ -103,6 +103,8 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   // (RBAC permissions do not model per-order ownership), like the downloads route.
   /^\/v1\/orders\/[^/]+$/,
   /^\/v1\/orders\/[^/]+\/refund-request$/,
+  // M2 F2.9 — Stripe Connect self-service routes; owner = request.user.
+  /^\/v1\/me\/kyc\/(start|status)$/,
 ];
 
 // ---------- Helpers ----------

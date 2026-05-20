@@ -20,6 +20,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 
 import { writeAudit } from '../lib/audit.js';
+import { reconcileRefundFromWebhook } from './admin-refunds.js';
+import { handleAccountUpdated } from './connect.js';
+import { recordOrderSale } from './order-split.js';
 
 const { orders, stripeWebhookEvents } = schema.commerce.tables;
 
@@ -83,7 +86,10 @@ const handlePaymentSucceeded = async (
   const order = rows[0];
   if (!order) return 'ignored';
   if (order.status === 'paid') {
-    // Already processed — idempotent no-op. Still counts as success.
+    // Already marked paid. Re-run the sale ledger post — it is idempotent and
+    // this backfills the ledger if a prior delivery flipped status but failed
+    // before posting (the status guard below would otherwise skip it forever).
+    await recordOrderSale(db, order.id);
     return 'success';
   }
 
@@ -99,6 +105,11 @@ const handlePaymentSucceeded = async (
       updatedAt: new Date(),
     })
     .where(and(eq(orders.id, order.id), eq(orders.status, 'pending_payment')));
+
+  // Post the double-entry sale batch (per-photographer split + fees). Idempotent
+  // via the ledger dedupe index. Throwing here marks the event 'error' so Stripe
+  // retries — preferable to silently skipping the ledger.
+  await recordOrderSale(db, order.id);
 
   await enqueueFulfillment({ orderId: order.id });
 
@@ -158,6 +169,16 @@ const handleChargeRefunded = async (db: DbClient, event: Stripe.Event): Promise<
 
   const order = rows[0];
   if (!order) return 'ignored';
+
+  // Reconcile refunded_cents from Stripe's authoritative amount_refunded. This
+  // is the backstop when an admin refund's API response was lost; idempotent.
+  await reconcileRefundFromWebhook(db, {
+    id: charge.id,
+    payment_intent: piId,
+    amount_refunded: charge.amount_refunded ?? 0,
+    amount: charge.amount,
+  });
+
   const refundedAmount = charge.amount_refunded ?? 0;
   const fullyRefunded = refundedAmount >= order.totalCents;
   const nextStatus = fullyRefunded ? 'refunded' : 'partially_refunded';
@@ -220,6 +241,10 @@ export const handleWebhookEvent = async (
         break;
       case 'charge.refunded':
         result = await handleChargeRefunded(db, event);
+        break;
+      case 'account.updated':
+        await handleAccountUpdated(db, event.data.object as Stripe.Account);
+        result = 'success';
         break;
       default:
         result = 'ignored';
