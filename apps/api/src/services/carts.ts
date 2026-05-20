@@ -355,6 +355,13 @@ export const addCartItem = async (
     };
   }
 
+  // Snapshot the product price at add-to-cart time. Each license tier is a
+  // distinct product row with its own tier-specific priceCents (see catalog
+  // products unique index on event+photo+kind+licenseTier), so the tier
+  // multiplier is already baked into product.priceCents — do NOT re-apply it
+  // here or the tier uplift would be double-counted.
+  const unitPriceCents = product.priceCents;
+
   const inserted = await db
     .insert(cartItems)
     .values({
@@ -363,7 +370,7 @@ export const addCartItem = async (
       photoId,
       licenseTierId: input.licenseTierId,
       quantity,
-      unitPriceCents: product.priceCents,
+      unitPriceCents,
       currency: product.currency,
     })
     .returning();

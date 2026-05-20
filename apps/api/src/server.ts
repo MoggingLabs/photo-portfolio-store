@@ -13,7 +13,9 @@ import checkoutRoutes from './routes/checkout.js';
 import consentRoutes from './routes/consents.js';
 import downloadsRoutes from './routes/downloads.js';
 import eventsRoutes from './routes/events.js';
+import pricingRoutes from './routes/pricing.js';
 import productsRoutes from './routes/products.js';
+import refundsRoutes from './routes/refunds.js';
 import searchFaceRoutes from './routes/search-face.js';
 import searchRoutes from './routes/search.js';
 import uploadsRoutes from './routes/uploads.js';
@@ -82,6 +84,10 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(checkoutRoutes);
   await app.register(stripeWebhookRoutes);
   await app.register(downloadsRoutes);
+  // M2 F2.4 — public storefront pricing/tier multipliers (anonymous-allowed).
+  await app.register(pricingRoutes);
+  // M2 F2.6 — buyer self-service refund requests (owner-gated within handler).
+  await app.register(refundsRoutes);
   await app.register(adminAuditRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));

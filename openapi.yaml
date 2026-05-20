@@ -703,6 +703,36 @@ paths:
         '422': { $ref: '#/components/responses/Unprocessable' }
         '500': { $ref: '#/components/responses/ServerError' }
 
+  /v1/pricing/tiers:
+    get:
+      operationId: listPricingTiers
+      tags: [commerce]
+      summary: List license tiers with their price multipliers
+      description: >
+        Public storefront endpoint. Returns the license tiers and the effective
+        price multiplier for each, resolved from pricing_rules (kind=tier_uplift)
+        with precedence event-scoped > global > built-in default. Pass eventId to
+        get event-specific multipliers.
+      parameters:
+        - name: eventId
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Tier list with multipliers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tiers]
+                properties:
+                  tiers:
+                    type: array
+                    items: { $ref: '#/components/schemas/PricingTier' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
   /v1/cart:
     post:
       operationId: createCart
@@ -813,7 +843,7 @@ paths:
       operationId: getOrder
       tags: [commerce]
       summary: Retrieve an order
-      x-status: stub
+      description: Owner-gated. Includes the active refund request when one exists.
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -825,6 +855,37 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/orders/{id}/refund-request:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: createRefundRequest
+      tags: [commerce]
+      summary: File a self-service refund request for an order
+      description: >
+        Owner-gated. Creates a pending refund request for admin review; no money
+        moves at this step. Rejected when the policy window has passed (422) or an
+        active request already exists (409).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequestCreate'
+      responses:
+        '201':
+          description: Refund request created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundRequestResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
         '500': { $ref: '#/components/responses/ServerError' }
   /v1/orders/{id}/downloads:
     parameters:
@@ -1607,6 +1668,45 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/OrderItem' }
+        refundRequest:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/OrderRefundRequest'
+    OrderRefundRequest:
+      type: object
+      required: [id, status, reason, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        status: { $ref: '#/components/schemas/RefundRequestStatus' }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+    RefundRequestStatus:
+      type: string
+      enum: [pending, approved, denied, processed]
+    RefundRequestCreate:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        requestedItems:
+          type: array
+          items: { $ref: '#/components/schemas/Uuid' }
+    RefundRequestResult:
+      type: object
+      required: [refundRequestId, status, createdAt]
+      properties:
+        refundRequestId: { $ref: '#/components/schemas/Uuid' }
+        status: { type: string, enum: [pending] }
+        createdAt: { type: string, format: date-time }
+    PricingTier:
+      type: object
+      required: [id, code, label, multiplier, scopeDescription]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        code: { type: string }
+        label: { type: string }
+        multiplier: { type: number }
+        scopeDescription: { type: string }
     OrderDownloadLink:
       type: object
       required: [photoId, url, expiresAt]

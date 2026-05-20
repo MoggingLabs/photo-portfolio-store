@@ -30,6 +30,9 @@ vi.mock('@pkg/db', () => {
         events: t('events'),
         eventSettings: t('event_settings'),
       },
+      catalog: {
+        licenseTiers: t('license_tiers'),
+      },
       compliance: {
         auditLog: t('audit_log'),
       },
@@ -131,12 +134,20 @@ const makeDispatchDb = (
     order?: Array<{ id: string; eventId: string; buyerEmail: string }>;
     event?: Array<{ name: string; timezone: string }>;
     settings?: Array<{ downloadExpiryHours: number }>;
-    items?: Array<{ photoId: string; derivativeKey: string }>;
+    items?: Array<{ photoId: string; derivativeKey: string; licenseTierId?: string }>;
   },
   side?: { insertReturnId?: string; insertThrows?: boolean },
 ) => {
   const inserts: Array<{ tableName: string; values: Record<string, unknown> }> = [];
   const updates: Array<{ set: Record<string, unknown> }> = [];
+
+  // order_items always carry a NOT NULL license_tier_id; default it so
+  // fixtures that omit it still pass the loadOrder item filter.
+  const itemsWithTier = () =>
+    (responses.items ?? []).map((item) => ({
+      licenseTierId: 'tier-personal',
+      ...item,
+    }));
 
   const buildSelect = () =>
     vi.fn((_cols: unknown) => {
@@ -162,7 +173,7 @@ const makeDispatchDb = (
         // .where() may return { limit } OR be awaitable (items query).
         where.mockImplementation(() => {
           if (table === 'order_items') {
-            return Promise.resolve(responses.items ?? []);
+            return Promise.resolve(itemsWithTier());
           }
           return { limit };
         });
@@ -172,7 +183,7 @@ const makeDispatchDb = (
         joinChain.innerJoin = vi.fn().mockReturnValue(joinChain);
         joinChain.where = vi.fn().mockImplementation(() => {
           if (table === 'order_items') {
-            return Promise.resolve(responses.items ?? []);
+            return Promise.resolve(itemsWithTier());
           }
           return { limit };
         });

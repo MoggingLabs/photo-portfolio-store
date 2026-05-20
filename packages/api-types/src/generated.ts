@@ -453,6 +453,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pricing/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List license tiers with their price multipliers
+         * @description Public storefront endpoint. Returns the license tiers and the effective price multiplier for each, resolved from pricing_rules (kind=tier_uplift) with precedence event-scoped > global > built-in default. Pass eventId to get event-specific multipliers.
+         */
+        get: operations["listPricingTiers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cart": {
         parameters: {
             query?: never;
@@ -536,10 +556,35 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Retrieve an order */
+        /**
+         * Retrieve an order
+         * @description Owner-gated. Includes the active refund request when one exists.
+         */
         get: operations["getOrder"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders/{id}/refund-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * File a self-service refund request for an order
+         * @description Owner-gated. Creates a pending refund request for admin review; no money moves at this step. Rejected when the policy window has passed (422) or an active request already exists (409).
+         */
+        post: operations["createRefundRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1057,6 +1102,34 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             items: components["schemas"]["OrderItem"][];
+            refundRequest?: components["schemas"]["OrderRefundRequest"] | null;
+        };
+        OrderRefundRequest: {
+            id: components["schemas"]["Uuid"];
+            status: components["schemas"]["RefundRequestStatus"];
+            reason: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @enum {string} */
+        RefundRequestStatus: "pending" | "approved" | "denied" | "processed";
+        RefundRequestCreate: {
+            reason: string;
+            requestedItems?: components["schemas"]["Uuid"][];
+        };
+        RefundRequestResult: {
+            refundRequestId: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "pending";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        PricingTier: {
+            id: components["schemas"]["Uuid"];
+            code: string;
+            label: string;
+            multiplier: number;
+            scopeDescription: string;
         };
         OrderDownloadLink: {
             photoId: components["schemas"]["Uuid"];
@@ -2003,6 +2076,32 @@ export interface operations {
             500: components["responses"]["ServerError"];
         };
     };
+    listPricingTiers: {
+        parameters: {
+            query?: {
+                eventId?: components["schemas"]["Uuid"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tier list with multipliers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tiers: components["schemas"]["PricingTier"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["ServerError"];
+        };
+    };
     createCart: {
         parameters: {
             query?: never;
@@ -2147,6 +2246,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["ServerError"];
+        };
+    };
+    createRefundRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefundRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Refund request created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundRequestResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
             500: components["responses"]["ServerError"];
         };
     };

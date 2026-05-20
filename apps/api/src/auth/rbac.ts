@@ -92,6 +92,12 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   /^\/v1\/consents\/biometric(\/.*)?$/,
   // F1.24 — face search is anonymous-allowed and gated by biometric consent.
   /^\/v1\/events\/[^/]+\/search\/face$/,
+  // M2 F2.4 — storefront pricing/tier listing is public.
+  /^\/v1\/pricing\/tiers$/,
+  // M2 F2.6 — order read + refund request are owner-gated within the handler
+  // (RBAC permissions do not model per-order ownership), like the downloads route.
+  /^\/v1\/orders\/[^/]+$/,
+  /^\/v1\/orders\/[^/]+\/refund-request$/,
 ];
 
 // ---------- Helpers ----------

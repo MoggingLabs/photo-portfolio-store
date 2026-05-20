@@ -14,4 +14,5 @@ export * as photos from './photos.js';
 export * as search from './search.js';
 export * as catalog from './catalog.js';
 export * as commerce from './commerce.js';
+export * as payouts from './payouts.js';
 export * as compliance from './compliance.js';

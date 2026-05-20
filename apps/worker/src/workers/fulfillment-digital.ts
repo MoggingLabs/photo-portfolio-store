@@ -26,6 +26,8 @@ import archiver from 'archiver';
 import type { Job, Processor } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 
+import { LICENSE_PDF_TEMPLATE_VERSION, generateLicensePdf } from '../lib/license-pdf.js';
+
 import { writeWorkerAudit } from '../lib/audit.js';
 import { db as defaultDb } from '../lib/db.js';
 import { logger } from '../lib/logger.js';
@@ -39,6 +41,7 @@ import {
 const { orders, orderItems, fulfillments } = schema.commerce;
 const { photos, photoDerivatives } = schema.photos;
 const { events, eventSettings } = schema.events;
+const { licenseTiers } = schema.catalog;
 
 const DEFAULT_EXPIRY_HOURS = 72;
 const ZLIB_LEVEL = 6;
@@ -78,6 +81,10 @@ interface OrderLoadResult {
   eventTimezone: string;
   downloadExpiryHours: number;
   items: { photoId: string; objectKey: string; filename: string }[];
+  // License tier data for PDF generation (from first item; all items share the tier on a cart).
+  tierCode: string;
+  tierName: string;
+  tierScope: string;
 }
 
 const generateToken = (): string => randomBytes(32).toString('base64url');
@@ -184,6 +191,7 @@ const loadOrder = async (db: DbClient, orderId: string): Promise<OrderLoadResult
     .select({
       photoId: orderItems.photoId,
       derivativeKey: photoDerivatives.objectKey,
+      licenseTierId: orderItems.licenseTierId,
     })
     .from(orderItems)
     .innerJoin(photos, eq(photos.id, orderItems.photoId))
@@ -195,8 +203,8 @@ const loadOrder = async (db: DbClient, orderId: string): Promise<OrderLoadResult
 
   const items = itemRows
     .filter(
-      (row): row is { photoId: string; derivativeKey: string } =>
-        Boolean(row.photoId) && Boolean(row.derivativeKey),
+      (row): row is { photoId: string; derivativeKey: string; licenseTierId: string } =>
+        Boolean(row.photoId) && Boolean(row.derivativeKey) && Boolean(row.licenseTierId),
     )
     .map((row) => {
       const last = row.derivativeKey.split('/').pop() ?? `${row.photoId}.jpg`;
@@ -207,6 +215,30 @@ const loadOrder = async (db: DbClient, orderId: string): Promise<OrderLoadResult
       };
     });
 
+  // Resolve license tier for PDF generation. All items in a cart share one
+  // event-scoped tier; use the first item's tier as the representative.
+  const firstTierId = itemRows[0]?.licenseTierId ?? null;
+  let tierCode = 'personal';
+  let tierName = 'Personal use';
+  let tierScope = '';
+  if (firstTierId) {
+    const tierRows = await db
+      .select({
+        code: licenseTiers.code,
+        name: licenseTiers.name,
+        description: licenseTiers.description,
+      })
+      .from(licenseTiers)
+      .where(eq(licenseTiers.id, firstTierId))
+      .limit(1);
+    const tier = tierRows[0];
+    if (tier) {
+      tierCode = tier.code;
+      tierName = tier.name;
+      tierScope = tier.description;
+    }
+  }
+
   return {
     orderId: order.id,
     eventId: order.eventId,
@@ -215,6 +247,9 @@ const loadOrder = async (db: DbClient, orderId: string): Promise<OrderLoadResult
     eventTimezone: event.timezone,
     downloadExpiryHours,
     items,
+    tierCode,
+    tierName,
+    tierScope,
   };
 };
 
@@ -243,6 +278,7 @@ const buildAndUploadBundle = async (params: {
   bundleKey: string;
   items: { objectKey: string; filename: string }[];
   uploadZip: NonNullable<FulfillmentDigitalDeps['uploadZip']>;
+  licensePdf?: { filename: string; bytes: Buffer };
 }): Promise<void> => {
   const archive = archiver('zip', { zlib: { level: ZLIB_LEVEL } });
   const pass = new PassThrough();
@@ -267,6 +303,14 @@ const buildAndUploadBundle = async (params: {
     // Archiver expects Node `Readable`; S3 SDK returns Web ReadableStream in some setups.
     // biome-ignore lint/suspicious/noExplicitAny: archiver types narrow but accept both at runtime
     archive.append(stream as any, { name: item.filename });
+  }
+
+  // Staple the license PDF into the zip if provided.
+  if (params.licensePdf) {
+    const pdfPass = new PassThrough();
+    pdfPass.end(params.licensePdf.bytes);
+    // biome-ignore lint/suspicious/noExplicitAny: archiver types narrow but accept both at runtime
+    archive.append(pdfPass as any, { name: params.licensePdf.filename });
   }
 
   await archive.finalize();
@@ -332,7 +376,21 @@ export const processFulfillmentDigital = async (
     );
     const bundleKey = `bundles/${orderId}/${downloadToken}.zip`;
 
+    // Generate the license PDF before building the archive.
+    const licensePdfBytes = await generateLicensePdf({
+      buyerName: order.buyerEmail, // name not captured yet; email used as fallback
+      buyerEmail: order.buyerEmail,
+      photoIds: order.items.map((i) => i.photoId),
+      tierCode: order.tierCode,
+      tierName: order.tierName,
+      tierScope: order.tierScope,
+      orderId,
+      issuedAt: now(),
+      templateVersion: LICENSE_PDF_TEMPLATE_VERSION,
+    });
+
     // Insert in_progress fulfillment row first so failures leave a trail.
+    // templateVersion is persisted in payloadJsonb for license audit.
     const inserted = await db
       .insert(fulfillments)
       .values({
@@ -341,7 +399,12 @@ export const processFulfillmentDigital = async (
         status: 'in_progress',
         downloadToken,
         downloadExpiresAt,
-        payloadJsonb: { bundleKey, itemCount: order.items.length },
+        payloadJsonb: {
+          bundleKey,
+          itemCount: order.items.length,
+          licensePdfTemplateVersion: LICENSE_PDF_TEMPLATE_VERSION,
+          tierCode: order.tierCode,
+        },
       })
       .returning({ id: fulfillments.id });
     const fulfillmentId = inserted[0]?.id;
@@ -353,6 +416,7 @@ export const processFulfillmentDigital = async (
       bundleKey,
       items: order.items,
       uploadZip,
+      licensePdf: { filename: `license-${order.tierCode}.pdf`, bytes: licensePdfBytes },
     });
 
     await db

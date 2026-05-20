@@ -10,6 +10,7 @@ import {
   integer,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -115,9 +116,137 @@ export const products = app.table(
   }),
 );
 
+// ---------- bundles ----------
+// A bundle groups one or more photos for sale as a unit. The selector jsonb
+// document describes what is in the bundle by kind:
+//   kind='bib'       => selector = { "bib": "<bib_value>" }
+//   kind='foto_flat' => selector = { "all": true }
+//   kind='custom'    => selector = { "photoIds": ["<uuid>", ...] }
+// base_price_cents is the list price before any pricing rule is applied.
+
+export const bundleKind = app.enum('bundle_kind', ['bib', 'foto_flat', 'custom']);
+
+export const bundles = app.table(
+  'bundles',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    // refs events.id — cross-context, no FK.
+    eventId: uuid('event_id').notNull(),
+    kind: bundleKind('kind').notNull(),
+    // Shape depends on kind; see table comment above.
+    selector: jsonb('selector').notNull().default(sql`'{}'::jsonb`),
+    basePriceCents: integer('base_price_cents').notNull(),
+    currency: text('currency').notNull(),
+    // Same-file FK; license_tiers is seed data and safe to reference.
+    // NOTE: spec draft said `license_tier text` but established codebase
+    // pattern (products, cart_items, order_items) uses license_tier_id uuid.
+    // Using uuid FK here for consistency.
+    licenseTierId: uuid('license_tier_id')
+      .notNull()
+      .references(() => licenseTiers.id),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    eventActiveIdx: index('bundles_event_active_idx').on(table.eventId, table.active),
+  }),
+);
+
+// ---------- bundle_items ----------
+// Materialized bundle membership. Each row pins one photo to a bundle.
+// Cascade delete keeps membership in sync when a bundle is removed.
+
+export const bundleItems = app.table(
+  'bundle_items',
+  {
+    bundleId: uuid('bundle_id')
+      .notNull()
+      .references(() => bundles.id, { onDelete: 'cascade' }),
+    // refs photos.id — cross-context, no FK.
+    photoId: uuid('photo_id').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.bundleId, table.photoId] }),
+  }),
+);
+
+// ---------- pricing_rules ----------
+// Flexible rule engine for discounts and uplifts. params shape by kind:
+//   tier_uplift  => { "tierCode": "commercial", "multiplier": 2.5 }
+//   qty_discount => { "minQty": 5, "pct": 0.1 }
+//   time_window  => { "pct": 0.15 }  (bounds via starts_at / ends_at)
+//   pre_event    => { "pct": 0.20 }
+// Higher priority wins when multiple rules match.
+
+export const pricingRuleScope = app.enum('pricing_rule_scope', [
+  'global',
+  'event',
+  'bundle',
+  'photographer',
+]);
+
+export const pricingRuleKind = app.enum('pricing_rule_kind', [
+  'qty_discount',
+  'time_window',
+  'pre_event',
+  'tier_uplift',
+]);
+
+export const pricingRules = app.table(
+  'pricing_rules',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    scope: pricingRuleScope('scope').notNull(),
+    kind: pricingRuleKind('kind').notNull(),
+    params: jsonb('params').notNull().default(sql`'{}'::jsonb`),
+    // Higher value = evaluated first when multiple rules match.
+    priority: integer('priority').notNull().default(0),
+    startsAt: timestamp('starts_at', { withTimezone: true, mode: 'date' }),
+    endsAt: timestamp('ends_at', { withTimezone: true, mode: 'date' }),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    scopeActiveIdx: index('pricing_rules_scope_active_idx').on(
+      table.scope,
+      table.active,
+      table.startsAt,
+      table.endsAt,
+    ),
+  }),
+);
+
+// ---------- pricing_rule_targets ----------
+// Associates a pricing rule with a specific entity (event, bundle, photographer,
+// license tier). target_type drives dispatch in application code.
+
+export const pricingRuleTargets = app.table(
+  'pricing_rule_targets',
+  {
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => pricingRules.id, { onDelete: 'cascade' }),
+    // 'event' | 'bundle' | 'photographer' | 'tier'
+    targetType: text('target_type').notNull(),
+    targetId: uuid('target_id').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.ruleId, table.targetType, table.targetId] }),
+    targetIdx: index('pricing_rule_targets_target_idx').on(table.targetType, table.targetId),
+  }),
+);
+
 // ---------- Grouped export ----------
 
 export const tables = {
   licenseTiers,
   products,
+  bundles,
+  bundleItems,
+  pricingRules,
+  pricingRuleTargets,
 };

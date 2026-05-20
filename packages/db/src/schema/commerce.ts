@@ -289,6 +289,54 @@ export const stripeWebhookEvents = app.table(
   }),
 );
 
+// ---------- refund_requests ----------
+// Buyer-initiated refund requests scoped to a single order. The partial
+// unique index prevents a buyer from opening two in-flight requests for the
+// same order simultaneously (status in ('pending','approved')).
+// requested_items is an array of order_item ids or photo ids the buyer
+// wants refunded; an empty array implies the full order.
+
+export const refundRequestStatus = app.enum('refund_request_status', [
+  'pending',
+  'approved',
+  'denied',
+  'processed',
+]);
+
+export const refundRequests = app.table(
+  'refund_requests',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    // Same-file FK; cascade delete cleans up refund requests when an order is
+    // hard-deleted (admin tooling only — normal orders are never deleted).
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    // refs users.id — cross-context, no FK. Null for guest orders.
+    buyerId: uuid('buyer_id'),
+    reason: text('reason').notNull(),
+    // Array of order_item ids or photo ids scoped to the refund.
+    // Empty array means the buyer is requesting a full-order refund.
+    requestedItems: jsonb('requested_items').notNull().default(sql`'[]'::jsonb`),
+    status: refundRequestStatus('status').notNull().default('pending'),
+    // Internal admin note; not surfaced to buyers.
+    adminNote: text('admin_note'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    orderIdx: index('refund_requests_order_idx').on(table.orderId),
+    // Prevents two open refund requests for the same order.
+    activeUniqueIdx: uniqueIndex('refund_requests_active_unique')
+      .on(table.orderId)
+      .where(sql`${table.status} in ('pending', 'approved')`),
+  }),
+);
+
 // ---------- Grouped export ----------
 
 export const tables = {
@@ -298,4 +346,5 @@ export const tables = {
   orderItems,
   fulfillments,
   stripeWebhookEvents,
+  refundRequests,
 };
