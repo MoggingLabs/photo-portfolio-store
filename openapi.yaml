@@ -1068,6 +1068,134 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/ServerError' }
 
+  /v1/me/kyc/start:
+    post:
+      operationId: startKycOnboarding
+      tags: [commerce]
+      summary: Start Stripe Connect Express onboarding for the current photographer
+      description: Self-service. Creates (or reuses) the Connect account and returns a hosted onboarding link.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                country: { type: string }
+                currency: { type: string }
+      responses:
+        '200':
+          description: Hosted onboarding link.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [onboardingUrl, expiresAt]
+                properties:
+                  onboardingUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/me/kyc/status:
+    get:
+      operationId: getKycStatus
+      tags: [commerce]
+      summary: Get the current photographer's Connect onboarding status
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: KYC status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, chargesEnabled, payoutsEnabled, currentlyDue]
+                properties:
+                  status: { type: string }
+                  chargesEnabled: { type: boolean }
+                  payoutsEnabled: { type: boolean }
+                  currentlyDue:
+                    type: array
+                    items: { type: string }
+                  continueUrl: { type: string, format: uri }
+                  dashboardUrl: { type: string, format: uri }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/admin/orders/{id}/splits:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getOrderSplits
+      tags: [admin]
+      summary: View the computed revenue split for an order (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Balanced ledger batch + fee breakdown.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries, total_cents, platform_fee_cents, stripe_fee_cents]
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        account_id: { type: string }
+                        kind: { type: string }
+                        direction: { type: string, enum: [debit, credit] }
+                        amount_cents: { type: integer }
+                  total_cents: { type: integer }
+                  platform_fee_cents: { type: integer }
+                  stripe_fee_cents: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/admin/refund-requests/{id}/decision:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: decideRefundRequest
+      tags: [admin]
+      summary: Approve or deny a refund request (admin)
+      description: Approve triggers a Stripe refund + balanced reversal ledger entries; deny notifies the buyer.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approve, deny] }
+                amountCents: { type: integer, minimum: 1 }
+                adminNote: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: Decision applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, refundedCents]
+                properties:
+                  status: { type: string }
+                  stripeRefundId: { type: string }
+                  refundedCents: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '502': { $ref: '#/components/responses/ServerError' }
   /v1/admin/audit-log:
     get:
       operationId: listAuditLog

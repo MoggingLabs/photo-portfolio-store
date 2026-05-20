@@ -749,6 +749,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/kyc/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Stripe Connect Express onboarding for the current photographer
+         * @description Self-service. Creates (or reuses) the Connect account and returns a hosted onboarding link.
+         */
+        post: operations["startKycOnboarding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/kyc/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current photographer's Connect onboarding status */
+        get: operations["getKycStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        /** View the computed revenue split for an order (admin) */
+        get: operations["getOrderSplits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/refund-requests/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny a refund request (admin)
+         * @description Approve triggers a Stripe refund + balanced reversal ledger entries; deny notifies the buyer.
+         */
+        post: operations["decideRefundRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/audit-log": {
         parameters: {
             query?: never;
@@ -2634,6 +2712,152 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["ServerError"];
+        };
+    };
+    startKycOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    country?: string;
+                    currency?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Hosted onboarding link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        onboardingUrl: string;
+                        /** Format: date-time */
+                        expiresAt: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["ServerError"];
+        };
+    };
+    getKycStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KYC status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        chargesEnabled: boolean;
+                        payoutsEnabled: boolean;
+                        currentlyDue: string[];
+                        /** Format: uri */
+                        continueUrl?: string;
+                        /** Format: uri */
+                        dashboardUrl?: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["ServerError"];
+        };
+    };
+    getOrderSplits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Balanced ledger batch + fee breakdown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        entries: {
+                            account_id?: string;
+                            kind?: string;
+                            /** @enum {string} */
+                            direction?: "debit" | "credit";
+                            amount_cents?: number;
+                        }[];
+                        total_cents: number;
+                        platform_fee_cents: number;
+                        stripe_fee_cents: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["ServerError"];
+        };
+    };
+    decideRefundRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approve" | "deny";
+                    amountCents?: number;
+                    adminNote?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Decision applied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        stripeRefundId?: string;
+                        refundedCents: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            502: components["responses"]["ServerError"];
         };
     };
     listAuditLog: {
