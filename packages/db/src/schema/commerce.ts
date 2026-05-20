@@ -143,6 +143,8 @@ export const orders = app.table(
     taxCents: integer('tax_cents').notNull().default(0),
     // = subtotal + tax. Application enforces.
     totalCents: integer('total_cents').notNull(),
+    // Cumulative amount refunded to the buyer (F2.7). Never exceeds total_cents.
+    refundedCents: integer('refunded_cents').notNull().default(0),
     currency: text('currency').notNull(),
     // Set after PaymentIntent creation (F1.29). Unique enables idempotent
     // webhook reconciliation (F1.30).
@@ -321,6 +323,13 @@ export const refundRequests = app.table(
     status: refundRequestStatus('status').notNull().default('pending'),
     // Internal admin note; not surfaced to buyers.
     adminNote: text('admin_note'),
+    // Amount the admin approved for refund (F2.7). Null until a decision.
+    approvedAmountCents: integer('approved_amount_cents'),
+    // Stripe Refund object id once the refund API call succeeds.
+    stripeRefundId: text('stripe_refund_id'),
+    // Number of Stripe refund attempts; feeds the idempotency key
+    // `refund:{id}:{attempt}` so a retry never double-refunds.
+    refundAttempts: integer('refund_attempts').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .default(sql`now()`),

@@ -45,6 +45,17 @@ export const ledgerKind = app.enum('ledger_kind', [
 
 export const payoutStatus = app.enum('payout_status', ['pending', 'sent', 'paid', 'failed']);
 
+// Internal double-entry accounts. Platform kinds are singletons; 'photographer'
+// rows are one-per-photographer (keyed by photographer_id) and exist
+// independently of the photographer's Stripe payout account so earnings can
+// accrue before onboarding completes.
+export const ledgerAccountKind = app.enum('ledger_account_kind', [
+  'platform_cash',
+  'platform_revenue',
+  'stripe_fee',
+  'photographer',
+]);
+
 // ---------- payout_accounts ----------
 // One record per photographer. status lifecycle:
 //   'pending'     — account row exists; Stripe Connect onboarding not started
@@ -124,6 +135,34 @@ export const payouts = app.table(
   }),
 );
 
+// ---------- ledger_accounts ----------
+// Internal accounts for double-entry. Platform accounts (cash, revenue,
+// stripe_fee) are singletons; photographer accounts are one-per-user. Declared
+// before ledger_entries so the account_id FK can reference it.
+
+export const ledgerAccounts = app.table(
+  'ledger_accounts',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    kind: ledgerAccountKind('kind').notNull(),
+    // Set only for kind='photographer'. refs users.id — cross-context, no FK.
+    photographerId: uuid('photographer_id'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    // One row per platform kind (cash/revenue/stripe_fee).
+    platformKindUnique: uniqueIndex('ledger_accounts_platform_kind_unique')
+      .on(table.kind)
+      .where(sql`${table.kind} <> 'photographer'`),
+    // One account per photographer.
+    photographerUnique: uniqueIndex('ledger_accounts_photographer_unique')
+      .on(table.photographerId)
+      .where(sql`${table.kind} = 'photographer'`),
+  }),
+);
+
 // ---------- ledger_entries ----------
 // Immutable double-entry ledger rows. Every financial event (sale, fee,
 // refund, payout) produces one or more rows here. amount_cents is always
@@ -136,7 +175,7 @@ export const ledgerEntries = app.table(
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     accountId: uuid('account_id')
       .notNull()
-      .references(() => payoutAccounts.id),
+      .references(() => ledgerAccounts.id),
     // refs orders.id — cross-context, no FK.
     orderId: uuid('order_id'),
     // refs refund_requests.id — cross-context, no FK.
@@ -160,10 +199,16 @@ export const ledgerEntries = app.table(
       table.createdAt,
     ),
     orderIdx: index('ledger_entries_order_idx').on(table.orderId),
-    // Prevents duplicate ledger entries per (order, kind, account, direction).
-    dedupeIdx: uniqueIndex('ledger_entries_dedupe_idx')
+    // Sale/fee idempotency: one entry per (order, kind, account, direction) for
+    // non-refund rows. Excludes refunds so multiple partial refunds on the same
+    // order do not collide.
+    saleDedupeIdx: uniqueIndex('ledger_entries_sale_dedupe_idx')
       .on(table.orderId, table.kind, table.accountId, table.direction)
-      .where(sql`${table.orderId} is not null`),
+      .where(sql`${table.orderId} is not null and ${table.refundId} is null`),
+    // Refund idempotency: one entry per (refund, account, direction).
+    refundDedupeIdx: uniqueIndex('ledger_entries_refund_dedupe_idx')
+      .on(table.refundId, table.accountId, table.direction)
+      .where(sql`${table.refundId} is not null`),
     amountPositive: check('ledger_entries_amount_positive', sql`${table.amountCents} > 0`),
   }),
 );
@@ -173,5 +218,6 @@ export const ledgerEntries = app.table(
 export const tables = {
   payoutAccounts,
   payouts,
+  ledgerAccounts,
   ledgerEntries,
 };

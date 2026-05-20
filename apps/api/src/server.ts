@@ -21,6 +21,7 @@ import searchFaceRoutes from './routes/search-face.js';
 import searchRoutes from './routes/search.js';
 import uploadsRoutes from './routes/uploads.js';
 import stripeWebhookRoutes from './routes/webhooks-stripe.js';
+import { seedPlatformLedgerAccounts } from './services/ledger.js';
 import { seedDefaultLicenseTiers } from './services/products.js';
 
 export const buildServer = async (): Promise<FastifyInstance> => {
@@ -65,6 +66,11 @@ export const buildServer = async (): Promise<FastifyInstance> => {
       await seedDefaultLicenseTiers(db);
     } catch (err) {
       app.log.warn({ err }, 'license tier seed failed — continuing');
+    }
+    try {
+      await seedPlatformLedgerAccounts(db);
+    } catch (err) {
+      app.log.warn({ err }, 'platform ledger account seed failed — continuing');
     }
   }
 

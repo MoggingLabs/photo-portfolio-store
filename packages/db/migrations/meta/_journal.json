@@ -43,6 +43,13 @@
       "when": 1779475507438,
       "tag": "0005_commerce_depth",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779561907438,
+      "tag": "0006_ledger_accounts",
+      "breakpoints": true
     }
   ]
 }
