@@ -5,7 +5,7 @@
 // secret. Use it on anything derived from integration_configs before logging.
 
 export const SENSITIVE_KEY_RE =
-  /(credential|secret|token|api[-_]?key|password|passphrase|private[-_]?key|authorization)/i;
+  /(credential|secret|token|api[-_]?key|password|passphrase|private[-_]?key|authorization|bearer|hmac|signing[-_]?key|access[-_]?token|refresh[-_]?token|client[-_]?secret|webhook[-_]?secret)/i;
 
 const MASK = '[REDACTED]';
 

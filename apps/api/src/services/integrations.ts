@@ -45,6 +45,9 @@ export interface TestResult {
 
 // A connector connectivity checker. Receives the decrypted credentials + the
 // non-secret config. Real checkers are registered per connector (F4.6+).
+//
+// SECURITY: `credentials` is PLAINTEXT. Implementations MUST NOT log it, embed
+// it in error messages, or include it in a thrown error / returned TestResult.
 export type ConnectorTester = (
   type: IntegrationType,
   credentials: string,
@@ -141,29 +144,39 @@ export const upsertIntegration = async (
       ? encryptCredentials(input.credentials, deps.masterKey)
       : undefined;
 
-  const enabled = input.enabled ?? true;
-  const values = {
+  // Test results only change when a test actually ran (credentials supplied).
+  const testFields =
+    test !== null
+      ? {
+          lastSyncedAt: test.ok ? now : null,
+          lastError: test.ok ? null : (test.error ?? 'test_failed'),
+        }
+      : {};
+
+  // INSERT defaults a brand-new connector to enabled unless told otherwise.
+  const insertValues = {
     orgId,
     type,
-    enabled,
+    enabled: input.enabled ?? true,
     ...(encrypted !== undefined ? { encryptedCredentials: encrypted } : {}),
     ...(input.config !== undefined ? { configJson: input.config } : {}),
-    lastSyncedAt: test?.ok ? now : null,
-    lastError: test && !test.ok ? (test.error ?? 'test_failed') : null,
+    ...testFields,
     updatedAt: now,
   };
 
   await db
     .insert(integrationConfigs)
-    .values(values)
+    .values(insertValues)
     .onConflictDoUpdate({
       target: [integrationConfigs.orgId, integrationConfigs.type],
+      // UPDATE only touches explicitly-provided fields, so a config-only PUT
+      // never silently re-enables a soft-deleted connector or wipes its last
+      // test result.
       set: {
-        enabled: values.enabled,
+        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
         ...(encrypted !== undefined ? { encryptedCredentials: encrypted } : {}),
         ...(input.config !== undefined ? { configJson: input.config } : {}),
-        lastSyncedAt: values.lastSyncedAt,
-        lastError: values.lastError,
+        ...testFields,
         updatedAt: now,
       },
     });
@@ -211,7 +224,19 @@ export const testIntegration = async (
     throw new IntegrationError('not_found', 'integration not configured');
   }
 
-  const credentials = decryptCredentials(row.encryptedCredentials, deps.masterKey);
+  // A decryption failure (wrong/rotated master key, tampered blob) is a config
+  // error, not a server crash — surface it as a failed test, not an opaque 500.
+  let credentials: string;
+  try {
+    credentials = decryptCredentials(row.encryptedCredentials, deps.masterKey);
+  } catch {
+    await db
+      .update(integrationConfigs)
+      .set({ lastSyncedAt: null, lastError: 'decryption_failed', updatedAt: new Date() })
+      .where(and(eq(integrationConfigs.orgId, orgId), eq(integrationConfigs.type, type)));
+    return { ok: false, error: 'decryption_failed' };
+  }
+
   const tester = deps.tester ?? defaultTester;
   const result = await tester(
     type,

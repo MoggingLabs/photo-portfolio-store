@@ -2,8 +2,10 @@
 //
 // Org-scoped (the repo models multi-org tenancy; the issue's generic
 // "/api/integrations" maps to "/v1/orgs/:orgId/integrations" here). Gated by
-// `integrations:manage` resolved against the org resource, so a platform admin
-// (role perm) or that org's owner/admin (resource check) may manage connectors.
+// `integrations:manage` resolved against the org resource: reachable via
+// superadmin or the target org's owner/admin (isOrgAdminOfOrg). It is NOT a
+// baseline admin-role perm, so a platform admin cannot reach another org's
+// connector credentials (per-org isolation, F4.1).
 //
 // GET    /v1/orgs/:orgId/integrations            — list connector status.
 // PUT    /v1/orgs/:orgId/integrations/:type      — upsert credentials/config.
@@ -12,6 +14,7 @@
 //
 // Credentials are never returned by any response.
 
+import rateLimit from '@fastify/rate-limit';
 import type { DbClient } from '@pkg/db';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -34,17 +37,28 @@ const typeParamSchema = z.object({
   orgId: z.string().uuid(),
   type: z.enum(INTEGRATION_TYPES),
 });
+// Cap the serialized non-secret config so an admin can't store an unbounded /
+// deeply-nested blob that is reflected on every status read.
+const MAX_CONFIG_BYTES = 8192;
 const upsertBodySchema = z
   .object({
     credentials: z.string().min(1).max(8192).optional(),
-    config: z.record(z.unknown()).optional(),
+    config: z
+      .record(z.unknown())
+      .refine((c) => Buffer.byteLength(JSON.stringify(c), 'utf8') <= MAX_CONFIG_BYTES, {
+        message: `config exceeds ${MAX_CONFIG_BYTES} bytes`,
+      })
+      .optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
 
+// Resolve the org resource for RBAC. A malformed orgId yields a sentinel that
+// isOrgAdminOfOrg can never match, so RBAC denies rather than silently
+// degrading to a role-only check (the handler also re-validates and 400s).
 const orgResource = (req: FastifyRequest) => {
   const parsed = orgParamSchema.safeParse(req.params);
-  return parsed.success ? ({ kind: 'org', id: parsed.data.orgId } as const) : undefined;
+  return { kind: 'org', id: parsed.success ? parsed.data.orgId : '__invalid__' } as const;
 };
 
 export interface IntegrationsRoutesOptions {
@@ -61,6 +75,15 @@ const integrationsRoutes = async (
   // Resolve the master key lazily so boot/tests without it set don't crash.
   const masterKey = (): string => opts.masterKey ?? getIntegrationsMasterKey();
   const tester = opts.tester;
+
+  // Per-user rate limit on all connector-config routes; /test is tightened
+  // below since it triggers an outbound call using the stored secret.
+  await app.register(rateLimit, {
+    max: 60,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.user?.id ?? req.ip,
+    allowList: () => false,
+  });
 
   app.get(
     '/v1/orgs/:orgId/integrations',
@@ -108,7 +131,11 @@ const integrationsRoutes = async (
 
   app.post(
     '/v1/orgs/:orgId/integrations/:type/test',
-    { preHandler: app.requirePermission('integrations:manage', { resource: orgResource }) },
+    {
+      preHandler: app.requirePermission('integrations:manage', { resource: orgResource }),
+      // Tighter limit: each call decrypts the secret and makes an outbound call.
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
     async (request, reply) => {
       const params = typeParamSchema.safeParse(request.params);
       if (!params.success || !isIntegrationType(params.data.type)) {

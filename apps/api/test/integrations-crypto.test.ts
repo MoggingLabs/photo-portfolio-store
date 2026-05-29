@@ -69,4 +69,25 @@ describe('redactSecrets', () => {
     expect(redactSecrets('hi')).toBe('hi');
     expect(redactSecrets(null)).toBeNull();
   });
+
+  it('masks connector-style secret keys (webhook/bearer/hmac/oauth tokens)', () => {
+    const out = redactSecrets({
+      webhookSecret: 'w',
+      bearer: 'b',
+      hmacKey: 'h',
+      signing_key: 's',
+      access_token: 'a',
+      refreshToken: 'r',
+      clientSecret: 'c',
+      raceId: '123',
+    });
+    expect(out.webhookSecret).toBe('[REDACTED]');
+    expect(out.bearer).toBe('[REDACTED]');
+    expect(out.hmacKey).toBe('[REDACTED]');
+    expect(out.signing_key).toBe('[REDACTED]');
+    expect(out.access_token).toBe('[REDACTED]');
+    expect(out.refreshToken).toBe('[REDACTED]');
+    expect(out.clientSecret).toBe('[REDACTED]');
+    expect(out.raceId).toBe('123');
+  });
 });

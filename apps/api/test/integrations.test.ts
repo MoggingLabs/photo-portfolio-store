@@ -156,6 +156,27 @@ describe('upsertIntegration', () => {
     expect(JSON.stringify(status)).not.toContain('super-secret');
     expect('encryptedCredentials' in status).toBe(false);
   });
+
+  it('does not re-enable a disabled connector on a config-only update', async () => {
+    const db = makeDb();
+    await svc.upsertIntegration(
+      db,
+      'org1',
+      'sftp',
+      { credentials: 'k', enabled: false },
+      { masterKey, tester: async () => ({ ok: true }) },
+    );
+    expect(store[0]?.enabled).toBe(false);
+    const { status } = await svc.upsertIntegration(
+      db,
+      'org1',
+      'sftp',
+      { config: { a: 1 } },
+      { masterKey },
+    );
+    expect(status.enabled).toBe(false);
+    expect(status.config).toEqual({ a: 1 });
+  });
 });
 
 describe('deleteIntegration', () => {
@@ -190,5 +211,14 @@ describe('testIntegration', () => {
     await expect(svc.testIntegration(db, 'org1', 'mylaps', { masterKey })).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+
+  it('returns decryption_failed (not an unhandled throw) when the master key cannot decrypt', async () => {
+    const db = makeDb();
+    await svc.upsertIntegration(db, 'org1', 'bayphoto', { credentials: 'k' }, { masterKey });
+    const wrongKey = randomBytes(32).toString('base64');
+    const result = await svc.testIntegration(db, 'org1', 'bayphoto', { masterKey: wrongKey });
+    expect(result).toEqual({ ok: false, error: 'decryption_failed' });
+    expect(store[0]?.lastError).toBe('decryption_failed');
   });
 });

@@ -41,7 +41,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, ReadonlyArray<Permission>> = {
     'commerce:refund',
     'compliance:read_audit',
     'admin:moderate',
-    'integrations:manage',
+    // NOTE: integrations:manage is intentionally NOT a baseline admin role
+    // perm. The RBAC org branch falls back to role perms for non-members, so
+    // granting it here would let any platform admin manage ANY org's connector
+    // credentials (cross-org IDOR). Instead it is reachable only via superadmin
+    // (holds all perms) or org owner/admin membership (isOrgAdminOfOrg) on the
+    // target org, keeping connector credentials strictly per-org (F4.1).
   ],
   organizer: [
     'org:read',
