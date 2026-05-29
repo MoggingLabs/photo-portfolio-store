@@ -10,6 +10,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgSchema,
   text,
   timestamp,
@@ -137,6 +138,15 @@ export const photos = app.table(
     // Number of reports/auto-flags; drives moderation-queue severity ordering.
     flagCount: integer('flag_count').notNull().default(0),
     lastFlaggedAt: timestamp('last_flagged_at', { withTimezone: true, mode: 'date' }),
+    // F3.12 — advisory technical-quality signals computed by the quality
+    // worker. quality_flags is null until scored; once scored it holds
+    // { blur, near_duplicate_of?, duplicate_group_id?, eyes_closed? }.
+    // blur_score is the Laplacian variance on the luma channel (higher =
+    // sharper). phash is the 64-bit perceptual hash used for near-duplicate
+    // detection (Hamming distance within an event window).
+    qualityFlags: jsonb('quality_flags'),
+    blurScore: numeric('blur_score', { precision: 10, scale: 2 }),
+    phash: bigint('phash', { mode: 'bigint' }),
     // F3.13 dashboard surfacing.
     featured: boolean('featured').notNull().default(false),
     // Set by F3.5 takedown workflow. Non-null implies status='takedown'.
@@ -167,6 +177,10 @@ export const photos = app.table(
       table.photographerUserId,
       table.eventId,
     ),
+    // F3.12 — near-duplicate candidate lookup. Hamming distance is computed in
+    // the worker over the event window; this btree index supports exact-phash
+    // dedup and scoped scans. A bk-tree/bucketed index is a future optimization.
+    phashIdx: index('photos_phash_idx').on(table.eventId, table.phash),
   }),
 );
 

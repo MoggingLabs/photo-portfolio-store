@@ -71,6 +71,13 @@
       "when": 1779821107438,
       "tag": "0009_takedowns_bipa",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779907507438,
+      "tag": "0010_photo_quality_flags",
+      "breakpoints": true
     }
   ]
 }

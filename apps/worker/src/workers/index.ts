@@ -11,10 +11,12 @@ import { getRedis } from '../lib/redis.js';
 import { FACE_QUEUE_NAME } from '../queues/face.js';
 import { FULFILLMENT_QUEUE_NAME } from '../queues/fulfillment.js';
 import { QUEUE_NAMES } from '../queues/index.js';
+import { QUALITY_QUEUE_NAME } from '../queues/quality.js';
 import { derivativesProcessor } from './derivatives.js';
 import { faceProcessor } from './face.js';
 import { fulfillmentDigitalProcessor } from './fulfillment-digital.js';
 import { ingestProcessor } from './ingest.js';
+import { qualityProcessor } from './quality.js';
 import { watermarkProcessor } from './watermark.js';
 
 export interface WorkerSet {
@@ -23,6 +25,7 @@ export interface WorkerSet {
   watermark: BullWorker;
   face: BullWorker;
   fulfillmentDigital: BullWorker;
+  quality: BullWorker;
 }
 
 const attachLifecycle = (worker: BullWorker, name: string): void => {
@@ -64,15 +67,23 @@ export const startWorkers = (): WorkerSet => {
     connection,
     concurrency: 3,
   });
+  // F3.12 — quality scoring. Concurrency 3 keeps sharp decode/CPU bounded.
+  const quality = new Worker(QUALITY_QUEUE_NAME, qualityProcessor, {
+    connection,
+    concurrency: 3,
+  });
 
   attachLifecycle(ingest, 'ingest');
   attachLifecycle(derivatives, 'derivatives');
   attachLifecycle(watermark, 'watermark');
   attachLifecycle(face, 'face');
   attachLifecycle(fulfillmentDigital, 'fulfillment-digital');
+  attachLifecycle(quality, 'quality');
 
-  logger.info('workers started: ingest, derivatives, watermark, face, fulfillment-digital');
-  return { ingest, derivatives, watermark, face, fulfillmentDigital };
+  logger.info(
+    'workers started: ingest, derivatives, watermark, face, fulfillment-digital, quality',
+  );
+  return { ingest, derivatives, watermark, face, fulfillmentDigital, quality };
 };
 
 export const stopWorkers = async (set: WorkerSet): Promise<void> => {
@@ -82,5 +93,6 @@ export const stopWorkers = async (set: WorkerSet): Promise<void> => {
     set.watermark.close(),
     set.face.close(),
     set.fulfillmentDigital.close(),
+    set.quality.close(),
   ]);
 };

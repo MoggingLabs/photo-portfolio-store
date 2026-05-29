@@ -12,6 +12,11 @@ export const workerEnvSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   S3_BUCKET_ORIGINALS: z.string().min(1),
   S3_BUCKET_DERIVATIVES: z.string().min(1),
+  // F3.12 — quality thresholds. Env-configurable, never hardcoded in business
+  // logic. blur_score below the threshold flags blur; phash Hamming distance at
+  // or below the max within an event flags a near-duplicate.
+  QUALITY_BLUR_THRESHOLD: z.coerce.number().positive().default(100),
+  QUALITY_PHASH_HAMMING_MAX: z.coerce.number().int().nonnegative().default(6),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
