@@ -78,6 +78,13 @@
       "when": 1779907507438,
       "tag": "0010_photo_quality_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779993907438,
+      "tag": "0011_integration_configs",
+      "breakpoints": true
     }
   ]
 }

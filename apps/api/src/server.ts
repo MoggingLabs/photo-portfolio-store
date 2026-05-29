@@ -23,6 +23,7 @@ import consentRoutes from './routes/consents.js';
 import downloadsRoutes from './routes/downloads.js';
 import eventStatsRoutes from './routes/event-stats.js';
 import eventsRoutes from './routes/events.js';
+import integrationsRoutes from './routes/integrations.js';
 import internalPayoutsRoutes from './routes/internal/payouts.js';
 import meBiometricDataRoutes from './routes/me-biometric-data.js';
 import meKycRoutes from './routes/me-kyc.js';
@@ -142,6 +143,8 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(adminTakedownRoutes);
   // M3 F3.6 — right-to-know self-service biometric data export (owner-gated).
   await app.register(meBiometricDataRoutes);
+  // M4 F4.1 — per-org connector configuration (integrations:manage, org-scoped).
+  await app.register(integrationsRoutes);
   // M2 F2.12 — internal cron-trigger for the weekly payout run (secret-gated).
   await app.register(internalPayoutsRoutes);
 

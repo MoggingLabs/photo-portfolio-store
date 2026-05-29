@@ -34,6 +34,8 @@ export const PERMISSIONS = [
   // Admin
   'admin:moderate',
   'admin:override',
+  // Integrations (F4.1) — manage per-org connector configs/credentials.
+  'integrations:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

@@ -41,6 +41,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, ReadonlyArray<Permission>> = {
     'commerce:refund',
     'compliance:read_audit',
     'admin:moderate',
+    'integrations:manage',
   ],
   organizer: [
     'org:read',

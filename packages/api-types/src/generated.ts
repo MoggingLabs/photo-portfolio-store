@@ -1032,6 +1032,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{orgId}/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List connector configuration status for an org (F4.1)
+         * @description Returns every known connector with its configured/enabled state. Credentials are never returned.
+         */
+        get: operations["listIntegrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/integrations/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                type: components["schemas"]["IntegrationType"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upsert connector credentials/config (F4.1)
+         * @description Credentials are envelope-encrypted at rest and never returned. A connectivity test is attempted and its result reported.
+         */
+        put: operations["upsertIntegration"];
+        post?: never;
+        /** Soft-delete a connector config; revokes stored credentials (F4.1) */
+        delete: operations["deleteIntegration"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/integrations/{type}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                type: components["schemas"]["IntegrationType"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Synchronous connectivity check for a configured connector (F4.1) */
+        post: operations["testIntegration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/internal/payouts/run": {
         parameters: {
             query?: never;
@@ -1293,6 +1359,23 @@ export interface components {
     schemas: {
         /** Format: uuid */
         Uuid: string;
+        /** @enum {string} */
+        IntegrationType: "runsignup" | "chronotrack" | "mylaps" | "bayphoto" | "gdrive" | "dropbox" | "sftp";
+        IntegrationStatus: {
+            type: components["schemas"]["IntegrationType"];
+            configured: boolean;
+            enabled: boolean;
+            /** Format: date-time */
+            lastSyncedAt: string | null;
+            lastError: string | null;
+            config: {
+                [key: string]: unknown;
+            } | null;
+        };
+        IntegrationTestResult: {
+            ok: boolean;
+            error?: string;
+        };
         Money: {
             /** @description Smallest currency unit (e.g. USD cents). */
             cents: number;
@@ -3745,6 +3828,123 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             500: components["responses"]["ServerError"];
+        };
+    };
+    listIntegrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connector status list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["IntegrationStatus"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    upsertIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                type: components["schemas"]["IntegrationType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    credentials?: string;
+                    config?: {
+                        [key: string]: unknown;
+                    };
+                    enabled?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Upsert result with status and test outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: components["schemas"]["IntegrationStatus"];
+                        test: components["schemas"]["IntegrationTestResult"] | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                type: components["schemas"]["IntegrationType"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connector disabled and credentials cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                type: components["schemas"]["IntegrationType"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     runPayouts: {

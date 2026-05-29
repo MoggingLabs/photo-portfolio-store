@@ -42,6 +42,8 @@ tags:
     description: Biometric consent grants and revocations.
   - name: admin
     description: Admin-only audit log access.
+  - name: integrations
+    description: Per-org third-party connector configuration.
 security: []
 paths:
   /health:
@@ -1544,6 +1546,110 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
         '500': { $ref: '#/components/responses/ServerError' }
+  /v1/orgs/{orgId}/integrations:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    get:
+      operationId: listIntegrations
+      tags: [integrations]
+      summary: List connector configuration status for an org (F4.1)
+      description: Returns every known connector with its configured/enabled state. Credentials are never returned.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Connector status list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/IntegrationStatus' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/orgs/{orgId}/integrations/{type}:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - name: type
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/IntegrationType' }
+    put:
+      operationId: upsertIntegration
+      tags: [integrations]
+      summary: Upsert connector credentials/config (F4.1)
+      description: Credentials are envelope-encrypted at rest and never returned. A connectivity test is attempted and its result reported.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credentials: { type: string, minLength: 1, maxLength: 8192 }
+                config: { type: object, additionalProperties: true }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Upsert result with status and test outcome.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, test]
+                properties:
+                  status: { $ref: '#/components/schemas/IntegrationStatus' }
+                  test:
+                    nullable: true
+                    allOf: [{ $ref: '#/components/schemas/IntegrationTestResult' }]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteIntegration
+      tags: [integrations]
+      summary: Soft-delete a connector config; revokes stored credentials (F4.1)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Connector disabled and credentials cleared. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orgs/{orgId}/integrations/{type}/test:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - name: type
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/IntegrationType' }
+    post:
+      operationId: testIntegration
+      tags: [integrations]
+      summary: Synchronous connectivity check for a configured connector (F4.1)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Test result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationTestResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/internal/payouts/run:
     post:
       operationId: runPayouts
@@ -1983,6 +2089,25 @@ components:
     Uuid:
       type: string
       format: uuid
+    IntegrationType:
+      type: string
+      enum: [runsignup, chronotrack, mylaps, bayphoto, gdrive, dropbox, sftp]
+    IntegrationStatus:
+      type: object
+      required: [type, configured, enabled, lastSyncedAt, lastError, config]
+      properties:
+        type: { $ref: '#/components/schemas/IntegrationType' }
+        configured: { type: boolean }
+        enabled: { type: boolean }
+        lastSyncedAt: { type: string, format: date-time, nullable: true }
+        lastError: { type: string, nullable: true }
+        config: { type: object, additionalProperties: true, nullable: true }
+    IntegrationTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        error: { type: string }
     Money:
       type: object
       required: [cents, currency]

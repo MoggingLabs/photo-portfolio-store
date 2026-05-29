@@ -77,6 +77,9 @@ importers:
       '@pkg/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@pkg/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@pkg/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -314,6 +317,18 @@ importers:
       zod:
         specifier: ^3.23.8
         version: 3.25.76
+    devDependencies:
+      '@pkg/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.10.1
+        version: 22.19.19
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/integrations:
     devDependencies:
       '@pkg/tsconfig':
         specifier: workspace:*
