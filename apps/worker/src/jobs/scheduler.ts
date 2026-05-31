@@ -4,18 +4,36 @@
 
 import { Cron } from 'croner';
 import pino from 'pino';
+import { request } from 'undici';
 
 import { db } from '../lib/db.js';
+import { workerEnv } from '../lib/env.js';
 import { qdrant } from '../lib/qdrant.js';
 import { runBipaRetentionDestruction } from './bipa-retention.js';
 import { triggerPayoutRun } from './payouts.js';
 import { runRetentionPass } from './retention.js';
 import { runTakedownSlaCheck } from './takedown-sla.js';
+import { type WebhookHttpClient, runWebhookDeliveries } from './webhook-delivery.js';
 
 const log = pino({ name: 'retention-scheduler' });
 const payoutLog = pino({ name: 'payout-scheduler' });
 const slaLog = pino({ name: 'takedown-sla' });
 const bipaLog = pino({ name: 'bipa-retention' });
+const webhookLog = pino({ name: 'webhook-delivery' });
+
+const WEBHOOK_TIMEOUT_MS = 10_000;
+
+const webhookHttpClient: WebhookHttpClient = async (url, body, headers) => {
+  const res = await request(url, {
+    method: 'POST',
+    body,
+    headers,
+    headersTimeout: WEBHOOK_TIMEOUT_MS,
+    bodyTimeout: WEBHOOK_TIMEOUT_MS,
+  });
+  const text = await res.body.text();
+  return { status: res.statusCode, body: text };
+};
 
 /**
  * Wire up cron jobs and return the live handles. Caller is responsible for
@@ -84,5 +102,25 @@ export const startSchedulers = (): Cron[] => {
     }
   });
 
-  return [retentionJob, payoutJob, slaJob, bipaJob];
+  // Outbound webhook delivery: every minute. Picks up due deliveries and
+  // performs the signed HTTP POST with retry/backoff + circuit breaking.
+  // Skipped entirely until the master key is provisioned.
+  const webhookJob = new Cron(
+    '* * * * *',
+    { name: 'webhook-delivery', protect: true },
+    async () => {
+      if (!workerEnv.INTEGRATIONS_MASTER_KEY) return;
+      try {
+        const result = await runWebhookDeliveries(db, {
+          masterKey: workerEnv.INTEGRATIONS_MASTER_KEY,
+          httpClient: webhookHttpClient,
+        });
+        if (result.processed > 0) webhookLog.info({ result }, 'webhook delivery sweep complete');
+      } catch (err) {
+        webhookLog.error({ err }, 'webhook delivery sweep failed');
+      }
+    },
+  );
+
+  return [retentionJob, payoutJob, slaJob, bipaJob, webhookJob];
 };

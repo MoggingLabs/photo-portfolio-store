@@ -195,6 +195,9 @@ importers:
       '@pkg/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@pkg/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@pkg/shared':
         specifier: workspace:*
         version: link:../../packages/shared

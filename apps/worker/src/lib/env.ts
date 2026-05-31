@@ -17,6 +17,10 @@ export const workerEnvSchema = z.object({
   // or below the max within an event flags a near-duplicate.
   QUALITY_BLUR_THRESHOLD: z.coerce.number().positive().default(100),
   QUALITY_PHASH_HAMMING_MAX: z.coerce.number().int().nonnegative().default(6),
+  // F4.11 — master key for decrypting outbound-webhook HMAC secrets. Optional
+  // here so the worker boots without it; the delivery job throws clearly if a
+  // delivery is attempted while unset.
+  INTEGRATIONS_MASTER_KEY: z.string().optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;

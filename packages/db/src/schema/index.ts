@@ -18,3 +18,4 @@ export * as payouts from './payouts.js';
 export * as compliance from './compliance.js';
 export * as integrations from './integrations.js';
 export * as participants from './participants.js';
+export * as webhooks from './webhooks.js';

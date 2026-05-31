@@ -1163,6 +1163,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{orgId}/webhooks/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        /** List outbound webhook subscriptions (F4.11) */
+        get: operations["listWebhookSubscriptions"];
+        put?: never;
+        /**
+         * Create an outbound webhook subscription (F4.11)
+         * @description The HMAC signing secret is generated server-side and returned exactly once.
+         */
+        post: operations["createWebhookSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/webhooks/subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                id: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Soft-disable a webhook subscription (F4.11) */
+        delete: operations["deleteWebhookSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/webhooks/subscriptions/{id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                id: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        /** Recent delivery attempts for a subscription (F4.11) */
+        get: operations["listWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/webhooks/subscriptions/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                id: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fire a synthetic test event to a subscription (F4.11) */
+        post: operations["testWebhookSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/internal/payouts/run": {
         parameters: {
             query?: never;
@@ -1474,6 +1557,33 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             issues: components["schemas"]["RosterIssue"][];
+        };
+        /** @enum {string} */
+        WebhookEventType: "order.paid" | "photos.ready_for_bib" | "event.published";
+        WebhookSubscription: {
+            id: components["schemas"]["Uuid"];
+            /** Format: uri */
+            targetUrl: string;
+            eventTypes: string[];
+            enabled: boolean;
+            disabledReason: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        WebhookDelivery: {
+            id: components["schemas"]["Uuid"];
+            eventId: components["schemas"]["Uuid"];
+            eventType: string;
+            attempt: number;
+            /** @enum {string} */
+            status: "pending" | "delivered" | "failed" | "retrying";
+            httpStatus: number | null;
+            /** Format: date-time */
+            scheduledAt: string;
+            /** Format: date-time */
+            deliveredAt: string | null;
+            /** Format: date-time */
+            nextRetryAt: string | null;
         };
         Money: {
             /** @description Smallest currency unit (e.g. USD cents). */
@@ -4123,6 +4233,149 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWebhookSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscriptions (no secrets). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["WebhookSubscription"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    targetUrl: string;
+                    eventTypes: components["schemas"]["WebhookEventType"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription created (secret shown once). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        subscription: components["schemas"]["WebhookSubscription"];
+                        secret: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    deleteWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                id: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription disabled. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWebhookDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                id: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Delivery attempts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["WebhookDelivery"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                id: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test delivery enqueued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        eventId: components["schemas"]["Uuid"];
+                    };
                 };
             };
             401: components["responses"]["Unauthorized"];

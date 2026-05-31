@@ -39,6 +39,7 @@ import searchRoutes from './routes/search.js';
 import takedownRoutes from './routes/takedowns.js';
 import uploadsRoutes from './routes/uploads.js';
 import stripeWebhookRoutes from './routes/webhooks-stripe.js';
+import webhookRoutes from './routes/webhooks.js';
 import { seedPlatformLedgerAccounts } from './services/ledger.js';
 import { seedDefaultLicenseTiers } from './services/products.js';
 
@@ -148,6 +149,8 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(integrationsRoutes);
   // M4 F4.5 — CSV roster import (event:write, event-scoped).
   await app.register(rosterRoutes);
+  // M4 F4.11 — outbound webhook subscriptions (integrations:manage, org-scoped).
+  await app.register(webhookRoutes);
   // M2 F2.12 — internal cron-trigger for the weekly payout run (secret-gated).
   await app.register(internalPayoutsRoutes);
 

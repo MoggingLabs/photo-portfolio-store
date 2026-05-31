@@ -1722,6 +1722,144 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orgs/{orgId}/webhooks/subscriptions:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    post:
+      operationId: createWebhookSubscription
+      tags: [integrations]
+      summary: Create an outbound webhook subscription (F4.11)
+      description: The HMAC signing secret is generated server-side and returned exactly once.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUrl, eventTypes]
+              properties:
+                targetUrl: { type: string, format: uri, maxLength: 2000 }
+                eventTypes:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: { $ref: '#/components/schemas/WebhookEventType' }
+      responses:
+        '201':
+          description: Subscription created (secret shown once).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription, secret]
+                properties:
+                  subscription: { $ref: '#/components/schemas/WebhookSubscription' }
+                  secret: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    get:
+      operationId: listWebhookSubscriptions
+      tags: [integrations]
+      summary: List outbound webhook subscriptions (F4.11)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Subscriptions (no secrets).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/orgs/{orgId}/webhooks/subscriptions/{id}:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    delete:
+      operationId: deleteWebhookSubscription
+      tags: [integrations]
+      summary: Soft-disable a webhook subscription (F4.11)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Subscription disabled. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orgs/{orgId}/webhooks/subscriptions/{id}/deliveries:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    get:
+      operationId: listWebhookDeliveries
+      tags: [integrations]
+      summary: Recent delivery attempts for a subscription (F4.11)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Delivery attempts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookDelivery' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orgs/{orgId}/webhooks/subscriptions/{id}/test:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    post:
+      operationId: testWebhookSubscription
+      tags: [integrations]
+      summary: Fire a synthetic test event to a subscription (F4.11)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Test delivery enqueued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [eventId]
+                properties:
+                  eventId: { $ref: '#/components/schemas/Uuid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/internal/payouts/run:
     post:
       operationId: runPayouts
@@ -2230,6 +2368,34 @@ components:
         issues:
           type: array
           items: { $ref: '#/components/schemas/RosterIssue' }
+    WebhookEventType:
+      type: string
+      enum: [order.paid, photos.ready_for_bib, event.published]
+    WebhookSubscription:
+      type: object
+      required: [id, targetUrl, eventTypes, enabled, disabledReason, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        targetUrl: { type: string, format: uri }
+        eventTypes:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        disabledReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    WebhookDelivery:
+      type: object
+      required: [id, eventId, eventType, attempt, status, httpStatus, scheduledAt, deliveredAt, nextRetryAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        eventId: { $ref: '#/components/schemas/Uuid' }
+        eventType: { type: string }
+        attempt: { type: integer }
+        status: { type: string, enum: [pending, delivered, failed, retrying] }
+        httpStatus: { type: integer, nullable: true }
+        scheduledAt: { type: string, format: date-time }
+        deliveredAt: { type: string, format: date-time, nullable: true }
+        nextRetryAt: { type: string, format: date-time, nullable: true }
     Money:
       type: object
       required: [cents, currency]
