@@ -13,6 +13,7 @@ export default defineConfig({
     './src/schema/commerce.ts',
     './src/schema/compliance.ts',
     './src/schema/integrations.ts',
+    './src/schema/notifications.ts',
     './src/schema/participants.ts',
     './src/schema/print.ts',
     './src/schema/timing.ts',

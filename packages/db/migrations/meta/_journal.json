@@ -120,6 +120,13 @@
       "when": 1780425907438,
       "tag": "0016_participant_transponder",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780512307438,
+      "tag": "0017_participant_notifications",
+      "breakpoints": true
     }
   ]
 }

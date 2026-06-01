@@ -8,6 +8,7 @@
 
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -39,6 +40,9 @@ export const participants = app.table(
     team: text('team'),
     // F4.8 — MyLaps transponder/chip id (nullable; indexed when present).
     transponderId: text('transponder_id'),
+    // F4.12 — notification preferences.
+    smsOptIn: boolean('sms_opt_in').notNull().default(false),
+    locale: text('locale'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .default(sql`now()`),

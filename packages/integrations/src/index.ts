@@ -7,5 +7,12 @@ export { CredentialCryptoError, decryptCredentials, encryptCredentials } from '.
 export { SENSITIVE_KEY_RE, redactSecrets } from './redaction.js';
 export { signWebhookBody, verifyWebhookSignature, type VerifyOptions } from './webhook-signing.js';
 export { SsrfError, assertPublicHttpsUrl, type AssertUrlOptions } from './ssrf.js';
+export {
+  type GalleryTokenClaims,
+  type SignGalleryTokenOptions,
+  signGalleryToken,
+  verifyGalleryToken,
+} from './gallery-token.js';
+export { isQuietHours, localHour, localeOffsetHours } from './quiet-hours.js';
 export * from './print-lab/index.js';
 export * from './timing/index.js';

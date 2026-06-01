@@ -122,6 +122,10 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   /^\/v1\/photos\/[^/]+\/quality$/,
   // M2 F2.12 — internal cron-trigger; machine-to-machine, secret-gated (not RBAC).
   /^\/v1\/internal\/payouts\/run$/,
+  // M4 F4.12 — internal notification enqueue trigger; secret-gated (not RBAC).
+  /^\/v1\/internal\/notifications\/run$/,
+  // M4 F4.12 — participant notification history; owner = request.user (by email).
+  /^\/v1\/notifications\/me$/,
   // M3 F3.4 — public takedown submission/verify/status; anonymous-allowed,
   // token-gated within the handler (not RBAC).
   /^\/v1\/takedowns(\/.*)?$/,

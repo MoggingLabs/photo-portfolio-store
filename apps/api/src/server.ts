@@ -24,11 +24,13 @@ import downloadsRoutes from './routes/downloads.js';
 import eventStatsRoutes from './routes/event-stats.js';
 import eventsRoutes from './routes/events.js';
 import integrationsRoutes from './routes/integrations.js';
+import internalNotificationsRoutes from './routes/internal/notifications.js';
 import internalPayoutsRoutes from './routes/internal/payouts.js';
 import meBiometricDataRoutes from './routes/me-biometric-data.js';
 import meKycRoutes from './routes/me-kyc.js';
 import mePayoutsRoutes from './routes/me-payouts.js';
 import mePhotographerRoutes from './routes/me-photographer.js';
+import notificationRoutes from './routes/notifications.js';
 import orderFulfillmentRoutes from './routes/order-fulfillment.js';
 import photoQualityRoutes from './routes/photo-quality.js';
 import pricingRoutes from './routes/pricing.js';
@@ -154,6 +156,8 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(rosterRoutes);
   // M4 F4.6+ — timing provider bindings (event:write, event-scoped).
   await app.register(timingRoutes);
+  // M4 F4.12 — "photos are ready" notifications (operator preview/resend + me).
+  await app.register(notificationRoutes);
   // M4 F4.11 — outbound webhook subscriptions (integrations:manage, org-scoped).
   await app.register(webhookRoutes);
   // M4 F4.10 — print fulfillment: order views (owner-gated) + inbound lab
@@ -162,6 +166,8 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(printWebhookRoutes);
   // M2 F2.12 — internal cron-trigger for the weekly payout run (secret-gated).
   await app.register(internalPayoutsRoutes);
+  // M4 F4.12 — internal cron-trigger for notification enqueue (secret-gated).
+  await app.register(internalNotificationsRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/', async () => ({ name: 'photo-portfolio-store api', ok: true }));

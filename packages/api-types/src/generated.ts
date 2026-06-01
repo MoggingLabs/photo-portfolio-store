@@ -1159,6 +1159,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/{id}/notifications/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview who would be notified now (F4.12)
+         * @description Operator view. Returns candidates (finish event + confident bib match) with coarse readiness only — raw email/phone are withheld.
+         */
+        post: operations["previewNotifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/participants/{id}/notifications/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator re-trigger of a participant's notification (F4.12)
+         * @description Rate-limited. Enqueues for the participant's event.
+         */
+        post: operations["resendParticipantNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/notifications/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Participant notification history (F4.12)
+         * @description Owner = authenticated user, matched by email.
+         */
+        get: operations["getMyNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{orgId}/integrations": {
         parameters: {
             query?: never;
@@ -4366,6 +4430,102 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    previewNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notifiable participants. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count: number;
+                        participants: {
+                            participantId: components["schemas"]["Uuid"];
+                            bib: string;
+                            matchedPhotos: number;
+                            hasEmail: boolean;
+                            smsOptIn: boolean;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resendParticipantNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enqueue totals. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enqueued: number;
+                        skipped: number;
+                        suppressed: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["ServerError"];
+        };
+    };
+    getMyNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            channel: string;
+                            template: string;
+                            status: string;
+                            eventId: components["schemas"]["Uuid"];
+                            /** Format: date-time */
+                            sentAt: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listIntegrations: {

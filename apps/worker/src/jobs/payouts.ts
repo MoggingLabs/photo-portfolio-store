@@ -55,3 +55,33 @@ export const triggerPayoutRun = async (opts?: {
 
   return { ok: true, status: response.status };
 };
+
+const notifyLog = logger.child({ job: 'notifications-enqueue' });
+
+/**
+ * POST to the internal notification-enqueue endpoint with the shared cron
+ * secret (F4.12). Same contract as triggerPayoutRun: never throws on non-2xx.
+ */
+export const triggerNotificationEnqueue = async (opts?: {
+  fetchImpl?: typeof fetch;
+}): Promise<TriggerPayoutRunResult> => {
+  const fetchFn = opts?.fetchImpl ?? fetch;
+  const url = `${process.env.API_BASE_URL ?? ''}/v1/internal/notifications/run`;
+  try {
+    const response = await fetchFn(url, {
+      method: 'POST',
+      headers: {
+        'x-internal-secret': process.env.INTERNAL_CRON_SECRET ?? '',
+        'content-type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      notifyLog.error({ status: response.status, url }, 'notifications-enqueue: non-2xx');
+      return { ok: false, status: response.status };
+    }
+    return { ok: true, status: response.status };
+  } catch (err) {
+    notifyLog.error({ err, url }, 'notifications-enqueue: fetch failed');
+    return { ok: false, status: 0 };
+  }
+};

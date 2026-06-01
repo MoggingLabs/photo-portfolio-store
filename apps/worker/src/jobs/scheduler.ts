@@ -21,7 +21,8 @@ import { db } from '../lib/db.js';
 import { workerEnv } from '../lib/env.js';
 import { qdrant } from '../lib/qdrant.js';
 import { runBipaRetentionDestruction } from './bipa-retention.js';
-import { triggerPayoutRun } from './payouts.js';
+import { type EmailSender, runNotificationSend } from './notifications-send.js';
+import { triggerNotificationEnqueue, triggerPayoutRun } from './payouts.js';
 import {
   type AdapterResolver,
   runPrintStatusPolls,
@@ -37,6 +38,45 @@ const payoutLog = pino({ name: 'payout-scheduler' });
 const slaLog = pino({ name: 'takedown-sla' });
 const bipaLog = pino({ name: 'bipa-retention' });
 const webhookLog = pino({ name: 'webhook-delivery' });
+const notifyLog = pino({ name: 'notifications-send' });
+
+// F4.12 — email sender for notifications. SMTP via SMTP_URL (Mailhog locally);
+// Resend via RESEND_API_KEY in production. Mirrors the fulfillment emailer.
+const notificationEmailSender: EmailSender = async (msg) => {
+  const from = process.env.EMAIL_FROM ?? 'Photos <no-reply@example.com>';
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
+    const res = await request('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: msg.to,
+        subject: msg.subject,
+        html: msg.html,
+        text: msg.text,
+      }),
+    });
+    const body = (await res.body.json().catch(() => ({}))) as { id?: string };
+    if (res.statusCode >= 300) throw new Error(`resend ${res.statusCode}`);
+    return { messageId: body.id };
+  }
+  const smtpUrl = process.env.SMTP_URL;
+  if (!smtpUrl) throw new Error('no email transport configured (SMTP_URL / RESEND_API_KEY)');
+  const nm = (await import('nodemailer')) as {
+    default?: typeof import('nodemailer');
+  } & typeof import('nodemailer');
+  const nodemailer = nm.default ?? nm;
+  const transport = nodemailer.createTransport(smtpUrl);
+  const info = await transport.sendMail({
+    from,
+    to: msg.to,
+    subject: msg.subject,
+    html: msg.html,
+    text: msg.text,
+  });
+  return { messageId: (info as { messageId?: string }).messageId };
+};
 const printLog = pino({ name: 'print-fulfillment' });
 const timingLog = pino({ name: 'timing-sync' });
 
@@ -274,6 +314,39 @@ export const startSchedulers = (): Cron[] => {
     }
   });
 
+  // Notification enqueue trigger: every 5 minutes. Calls the internal API to
+  // select notifiable participants and write pending rows (the selection logic
+  // lives in the API; the worker cannot import it).
+  const notifyEnqueueJob = new Cron(
+    '*/5 * * * *',
+    { name: 'notifications-enqueue', protect: true },
+    async () => {
+      const res = await triggerNotificationEnqueue();
+      if (!res.ok) notifyLog.warn({ status: res.status }, 'notifications enqueue trigger failed');
+    },
+  );
+
+  // Notification send sweep: every minute. Sends pending notifications (email
+  // always; SMS when configured + outside quiet hours). Skipped until the
+  // gallery-token secret is provisioned.
+  const notifySendJob = new Cron(
+    '* * * * *',
+    { name: 'notifications-send', protect: true },
+    async () => {
+      if (!workerEnv.GALLERY_TOKEN_SECRET) return;
+      try {
+        const result = await runNotificationSend(db, {
+          galleryTokenSecret: workerEnv.GALLERY_TOKEN_SECRET,
+          appBaseUrl: workerEnv.APP_BASE_URL ?? 'http://localhost:3000',
+          emailSender: notificationEmailSender,
+        });
+        if (result.processed > 0) notifyLog.info({ result }, 'notification send sweep complete');
+      } catch (err) {
+        notifyLog.error({ err }, 'notification send sweep failed');
+      }
+    },
+  );
+
   return [
     retentionJob,
     payoutJob,
@@ -283,5 +356,7 @@ export const startSchedulers = (): Cron[] => {
     printSubmitJob,
     printPollJob,
     timingJob,
+    notifyEnqueueJob,
+    notifySendJob,
   ];
 };

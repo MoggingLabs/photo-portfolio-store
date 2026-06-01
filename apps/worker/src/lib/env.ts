@@ -26,6 +26,10 @@ export const workerEnvSchema = z.object({
   // NOTE: per-org credential resolution via integration_configs is a follow-up.
   PRINT_BAYPHOTO_API_KEY: z.string().optional(),
   PRINT_BAYPHOTO_BASE_URL: z.string().url().optional(),
+  // F4.12 — HMAC secret for signed gallery deep-link tokens + the public app
+  // base URL used to build them. Send sweep is skipped until the secret is set.
+  GALLERY_TOKEN_SECRET: z.string().optional(),
+  APP_BASE_URL: z.string().url().optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;

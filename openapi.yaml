@@ -1699,6 +1699,95 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events/{id}/notifications/preview:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: previewNotifications
+      tags: [integrations]
+      summary: Preview who would be notified now (F4.12)
+      description: >-
+        Operator view. Returns candidates (finish event + confident bib match)
+        with coarse readiness only — raw email/phone are withheld.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Notifiable participants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, participants]
+                properties:
+                  count: { type: integer }
+                  participants:
+                    type: array
+                    items:
+                      type: object
+                      required: [participantId, bib, matchedPhotos, hasEmail, smsOptIn]
+                      properties:
+                        participantId: { $ref: '#/components/schemas/Uuid' }
+                        bib: { type: string }
+                        matchedPhotos: { type: integer }
+                        hasEmail: { type: boolean }
+                        smsOptIn: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/participants/{id}/notifications/resend:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: resendParticipantNotification
+      tags: [integrations]
+      summary: Operator re-trigger of a participant's notification (F4.12)
+      description: Rate-limited. Enqueues for the participant's event.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Enqueue totals.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enqueued, skipped, suppressed]
+                properties:
+                  enqueued: { type: integer }
+                  skipped: { type: integer }
+                  suppressed: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/ServerError' }
+  /v1/notifications/me:
+    get:
+      operationId: getMyNotifications
+      tags: [integrations]
+      summary: Participant notification history (F4.12)
+      description: Owner = authenticated user, matched by email.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Notification history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [channel, template, status, eventId, sentAt, createdAt]
+                      properties:
+                        channel: { type: string }
+                        template: { type: string }
+                        status: { type: string }
+                        eventId: { $ref: '#/components/schemas/Uuid' }
+                        sentAt: { type: string, format: date-time, nullable: true }
+                        createdAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /v1/orgs/{orgId}/integrations:
     parameters:
       - name: orgId
