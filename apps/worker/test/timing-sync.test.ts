@@ -126,6 +126,19 @@ describe('runTimingSync', () => {
     expect(parts).toHaveLength(1);
   });
 
+  it('keeps an existing email when the provider supplies none (F4.7 conflict rule)', async () => {
+    parts = [{ eventId: 'e1', bib: '7', name: 'old', email: 'csv@x.io' }];
+    bindings = [binding()];
+    const adapter = stubAdapter([{ bib: '7', firstName: 'New', lastName: 'Name' }], []);
+    await job.runTimingSync(makeDb() as never, {
+      masterKey: 'mk',
+      adapterFactory: () => adapter as never,
+      now: () => NOW,
+    });
+    expect(parts[0]?.name).toBe('New Name'); // provider authoritative for name
+    expect(parts[0]?.email).toBe('csv@x.io'); // existing email preserved
+  });
+
   it('records an error and continues when the adapter throws', async () => {
     bindings = [binding()];
     const adapter = {

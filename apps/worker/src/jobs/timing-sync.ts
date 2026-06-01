@@ -88,12 +88,19 @@ export const runTimingSync = async (
       const roster = await adapter.pullRoster(b.externalEventId);
       for (const entry of roster) {
         const name = `${entry.firstName} ${entry.lastName}`.trim();
+        // Conflict resolution (F4.7): the provider is authoritative for name,
+        // but an existing email (e.g. from a CSV import) is kept when the
+        // provider has none — so only overwrite email when one is supplied.
         await db
           .insert(participants)
           .values({ eventId: b.eventId, bib: entry.bib, name, email: entry.email ?? null })
           .onConflictDoUpdate({
             target: [participants.eventId, participants.bib],
-            set: { name, email: entry.email ?? null, updatedAt: now() },
+            set: {
+              name,
+              ...(entry.email ? { email: entry.email } : {}),
+              updatedAt: now(),
+            },
           });
         result.rosterUpserted += 1;
       }

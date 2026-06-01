@@ -4,6 +4,7 @@
 
 import {
   BayPhotoAdapter,
+  ChronoTrackAdapter,
   type LabHttpClient,
   type PrintLabAdapter,
   RunSignupAdapter,
@@ -101,14 +102,26 @@ const timingHttpClient: TimingHttpClient = async (url, headers) => {
   return { status: res.statusCode, body: parsed };
 };
 
-// Build a timing adapter from its provider + decrypted API key. ChronoTrack /
-// MyLaps adapters plug in here (F4.7/F4.8); unsupported providers return null.
+// Build a timing adapter from its provider + decrypted credential. The
+// credential format is provider-specific (see each adapter). Unsupported
+// providers return null.
 const timingAdapterFactory: TimingAdapterFactory = (
   provider: TimingProvider,
-  apiKey: string,
+  credential: string,
 ): TimingProviderAdapter | null => {
-  if (provider === 'runsignup')
-    return new RunSignupAdapter({ apiKey, httpClient: timingHttpClient });
+  if (provider === 'runsignup') {
+    return new RunSignupAdapter({ apiKey: credential, httpClient: timingHttpClient });
+  }
+  if (provider === 'chronotrack') {
+    // Credential format: "username:user_token".
+    const idx = credential.indexOf(':');
+    if (idx <= 0) return null;
+    return new ChronoTrackAdapter({
+      username: credential.slice(0, idx),
+      userToken: credential.slice(idx + 1),
+      httpClient: timingHttpClient,
+    });
+  }
   return null;
 };
 
