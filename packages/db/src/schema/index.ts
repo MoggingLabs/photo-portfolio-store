@@ -19,4 +19,5 @@ export * as compliance from './compliance.js';
 export * as integrations from './integrations.js';
 export * as participants from './participants.js';
 export * as print from './print.js';
+export * as timing from './timing.js';
 export * as webhooks from './webhooks.js';

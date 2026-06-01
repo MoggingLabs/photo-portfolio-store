@@ -39,6 +39,7 @@ import rosterRoutes from './routes/roster.js';
 import searchFaceRoutes from './routes/search-face.js';
 import searchRoutes from './routes/search.js';
 import takedownRoutes from './routes/takedowns.js';
+import timingRoutes from './routes/timing.js';
 import uploadsRoutes from './routes/uploads.js';
 import stripeWebhookRoutes from './routes/webhooks-stripe.js';
 import webhookRoutes from './routes/webhooks.js';
@@ -151,6 +152,8 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(integrationsRoutes);
   // M4 F4.5 — CSV roster import (event:write, event-scoped).
   await app.register(rosterRoutes);
+  // M4 F4.6+ — timing provider bindings (event:write, event-scoped).
+  await app.register(timingRoutes);
   // M4 F4.11 — outbound webhook subscriptions (integrations:manage, org-scoped).
   await app.register(webhookRoutes);
   // M4 F4.10 — print fulfillment: order views (owner-gated) + inbound lab

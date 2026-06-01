@@ -1097,6 +1097,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/{id}/integrations/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+                provider: components["schemas"]["TimingProvider"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind an event to a timing provider race (F4.6+)
+         * @description Saves the external race id + API key (encrypted; never returned).
+         */
+        post: operations["bindTimingProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{id}/integrations/{provider}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+                provider: components["schemas"]["TimingProvider"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an immediate timing sync (F4.6+) */
+        post: operations["requestTimingSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{id}/integrations/timing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        /** List an event's timing bindings (F4.6+) */
+        get: operations["listTimingBindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{orgId}/integrations": {
         parameters: {
             query?: never;
@@ -1623,6 +1685,16 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             issues: components["schemas"]["RosterIssue"][];
+        };
+        /** @enum {string} */
+        TimingProvider: "runsignup" | "chronotrack" | "mylaps";
+        TimingBinding: {
+            provider: string;
+            externalEventId: string;
+            enabled: boolean;
+            /** Format: date-time */
+            lastSyncedAt: string | null;
+            lastError: string | null;
         };
         /** @enum {string} */
         WebhookEventType: "order.paid" | "photos.ready_for_bib" | "event.published";
@@ -4200,6 +4272,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RosterImportReport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    bindTimingProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+                provider: components["schemas"]["TimingProvider"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    externalEventId: string;
+                    apiKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Binding saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimingBinding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    requestTimingSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+                provider: components["schemas"]["TimingProvider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync requested. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        requested: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTimingBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bindings (no secrets). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TimingBinding"][];
+                    };
                 };
             };
             401: components["responses"]["Unauthorized"];

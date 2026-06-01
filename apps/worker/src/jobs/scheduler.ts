@@ -2,7 +2,15 @@
 // calls startSchedulers() once at boot and keeps the returned handles so they
 // can be stopped on shutdown.
 
-import { BayPhotoAdapter, type LabHttpClient, type PrintLabAdapter } from '@pkg/integrations';
+import {
+  BayPhotoAdapter,
+  type LabHttpClient,
+  type PrintLabAdapter,
+  RunSignupAdapter,
+  type TimingHttpClient,
+  type TimingProvider,
+  type TimingProviderAdapter,
+} from '@pkg/integrations';
 import { Cron } from 'croner';
 import pino from 'pino';
 import { request } from 'undici';
@@ -19,6 +27,7 @@ import {
 } from './print-fulfillment.js';
 import { runRetentionPass } from './retention.js';
 import { runTakedownSlaCheck } from './takedown-sla.js';
+import { type TimingAdapterFactory, runTimingSync } from './timing-sync.js';
 import { type WebhookHttpClient, runWebhookDeliveries } from './webhook-delivery.js';
 
 const log = pino({ name: 'retention-scheduler' });
@@ -27,6 +36,7 @@ const slaLog = pino({ name: 'takedown-sla' });
 const bipaLog = pino({ name: 'bipa-retention' });
 const webhookLog = pino({ name: 'webhook-delivery' });
 const printLog = pino({ name: 'print-fulfillment' });
+const timingLog = pino({ name: 'timing-sync' });
 
 const WEBHOOK_TIMEOUT_MS = 10_000;
 
@@ -71,6 +81,34 @@ const printAdapterResolver: AdapterResolver = (labCode): PrintLabAdapter | null 
       httpClient: labHttpClient,
     });
   }
+  return null;
+};
+
+const timingHttpClient: TimingHttpClient = async (url, headers) => {
+  const res = await request(url, {
+    method: 'GET',
+    headers,
+    headersTimeout: WEBHOOK_TIMEOUT_MS,
+    bodyTimeout: WEBHOOK_TIMEOUT_MS,
+  });
+  const text = await res.body.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    /* non-JSON body; keep raw text */
+  }
+  return { status: res.statusCode, body: parsed };
+};
+
+// Build a timing adapter from its provider + decrypted API key. ChronoTrack /
+// MyLaps adapters plug in here (F4.7/F4.8); unsupported providers return null.
+const timingAdapterFactory: TimingAdapterFactory = (
+  provider: TimingProvider,
+  apiKey: string,
+): TimingProviderAdapter | null => {
+  if (provider === 'runsignup')
+    return new RunSignupAdapter({ apiKey, httpClient: timingHttpClient });
   return null;
 };
 
@@ -187,5 +225,30 @@ export const startSchedulers = (): Cron[] => {
     }
   });
 
-  return [retentionJob, payoutJob, slaJob, bipaJob, webhookJob, printSubmitJob, printPollJob];
+  // Timing sync: every 2 minutes. Pulls roster + finish events for each enabled
+  // event_timing_binding and upserts participants + finish_events. Skipped until
+  // the master key is provisioned (credentials cannot be decrypted otherwise).
+  const timingJob = new Cron('*/2 * * * *', { name: 'timing-sync', protect: true }, async () => {
+    if (!workerEnv.INTEGRATIONS_MASTER_KEY) return;
+    try {
+      const result = await runTimingSync(db, {
+        masterKey: workerEnv.INTEGRATIONS_MASTER_KEY,
+        adapterFactory: timingAdapterFactory,
+      });
+      if (result.bindingsProcessed > 0) timingLog.info({ result }, 'timing sync complete');
+    } catch (err) {
+      timingLog.error({ err }, 'timing sync failed');
+    }
+  });
+
+  return [
+    retentionJob,
+    payoutJob,
+    slaJob,
+    bipaJob,
+    webhookJob,
+    printSubmitJob,
+    printPollJob,
+    timingJob,
+  ];
 };

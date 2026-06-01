@@ -1618,6 +1618,87 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events/{id}/integrations/{provider}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - name: provider
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/TimingProvider' }
+    post:
+      operationId: bindTimingProvider
+      tags: [integrations]
+      summary: Bind an event to a timing provider race (F4.6+)
+      description: Saves the external race id + API key (encrypted; never returned).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [externalEventId, apiKey]
+              properties:
+                externalEventId: { type: string, minLength: 1, maxLength: 200 }
+                apiKey: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: Binding saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimingBinding' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events/{id}/integrations/{provider}/sync:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - name: provider
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/TimingProvider' }
+    post:
+      operationId: requestTimingSync
+      tags: [integrations]
+      summary: Request an immediate timing sync (F4.6+)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Sync requested.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requested]
+                properties:
+                  requested: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events/{id}/integrations/timing:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: listTimingBindings
+      tags: [integrations]
+      summary: List an event's timing bindings (F4.6+)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Bindings (no secrets).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/TimingBinding' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/orgs/{orgId}/integrations:
     parameters:
       - name: orgId
@@ -2453,6 +2534,18 @@ components:
         issues:
           type: array
           items: { $ref: '#/components/schemas/RosterIssue' }
+    TimingProvider:
+      type: string
+      enum: [runsignup, chronotrack, mylaps]
+    TimingBinding:
+      type: object
+      required: [provider, externalEventId, enabled, lastSyncedAt, lastError]
+      properties:
+        provider: { type: string }
+        externalEventId: { type: string }
+        enabled: { type: boolean }
+        lastSyncedAt: { type: string, format: date-time, nullable: true }
+        lastError: { type: string, nullable: true }
     WebhookEventType:
       type: string
       enum: [order.paid, photos.ready_for_bib, event.published]
