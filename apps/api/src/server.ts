@@ -29,8 +29,10 @@ import meBiometricDataRoutes from './routes/me-biometric-data.js';
 import meKycRoutes from './routes/me-kyc.js';
 import mePayoutsRoutes from './routes/me-payouts.js';
 import mePhotographerRoutes from './routes/me-photographer.js';
+import orderFulfillmentRoutes from './routes/order-fulfillment.js';
 import photoQualityRoutes from './routes/photo-quality.js';
 import pricingRoutes from './routes/pricing.js';
+import printWebhookRoutes from './routes/print-webhooks.js';
 import productsRoutes from './routes/products.js';
 import refundsRoutes from './routes/refunds.js';
 import rosterRoutes from './routes/roster.js';
@@ -151,6 +153,10 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(rosterRoutes);
   // M4 F4.11 — outbound webhook subscriptions (integrations:manage, org-scoped).
   await app.register(webhookRoutes);
+  // M4 F4.10 — print fulfillment: order views (owner-gated) + inbound lab
+  // webhook receiver (public, signature-gated).
+  await app.register(orderFulfillmentRoutes);
+  await app.register(printWebhookRoutes);
   // M2 F2.12 — internal cron-trigger for the weekly payout run (secret-gated).
   await app.register(internalPayoutsRoutes);
 

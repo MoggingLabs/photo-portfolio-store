@@ -2,6 +2,7 @@
 // calls startSchedulers() once at boot and keeps the returned handles so they
 // can be stopped on shutdown.
 
+import { BayPhotoAdapter, type LabHttpClient, type PrintLabAdapter } from '@pkg/integrations';
 import { Cron } from 'croner';
 import pino from 'pino';
 import { request } from 'undici';
@@ -11,6 +12,11 @@ import { workerEnv } from '../lib/env.js';
 import { qdrant } from '../lib/qdrant.js';
 import { runBipaRetentionDestruction } from './bipa-retention.js';
 import { triggerPayoutRun } from './payouts.js';
+import {
+  type AdapterResolver,
+  runPrintStatusPolls,
+  runPrintSubmissions,
+} from './print-fulfillment.js';
 import { runRetentionPass } from './retention.js';
 import { runTakedownSlaCheck } from './takedown-sla.js';
 import { type WebhookHttpClient, runWebhookDeliveries } from './webhook-delivery.js';
@@ -20,6 +26,7 @@ const payoutLog = pino({ name: 'payout-scheduler' });
 const slaLog = pino({ name: 'takedown-sla' });
 const bipaLog = pino({ name: 'bipa-retention' });
 const webhookLog = pino({ name: 'webhook-delivery' });
+const printLog = pino({ name: 'print-fulfillment' });
 
 const WEBHOOK_TIMEOUT_MS = 10_000;
 
@@ -33,6 +40,38 @@ const webhookHttpClient: WebhookHttpClient = async (url, body, headers) => {
   });
   const text = await res.body.text();
   return { status: res.statusCode, body: text };
+};
+
+const labHttpClient: LabHttpClient = async (method, url, headers, body) => {
+  const res = await request(url, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    headersTimeout: WEBHOOK_TIMEOUT_MS,
+    bodyTimeout: WEBHOOK_TIMEOUT_MS,
+  });
+  const text = await res.body.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    /* non-JSON body; keep raw text */
+  }
+  return { status: res.statusCode, body: parsed };
+};
+
+// Resolve a print-lab adapter by code. Credentials come from worker env for now
+// (per-org integration_configs resolution is a follow-up). Returns null when the
+// lab is not configured, so the submission sweep simply skips it.
+const printAdapterResolver: AdapterResolver = (labCode): PrintLabAdapter | null => {
+  if (labCode === 'bayphoto' && workerEnv.PRINT_BAYPHOTO_API_KEY) {
+    return new BayPhotoAdapter({
+      apiKey: workerEnv.PRINT_BAYPHOTO_API_KEY,
+      ...(workerEnv.PRINT_BAYPHOTO_BASE_URL ? { baseUrl: workerEnv.PRINT_BAYPHOTO_BASE_URL } : {}),
+      httpClient: labHttpClient,
+    });
+  }
+  return null;
 };
 
 /**
@@ -122,5 +161,31 @@ export const startSchedulers = (): Cron[] => {
     },
   );
 
-  return [retentionJob, payoutJob, slaJob, bipaJob, webhookJob];
+  // Print submission sweep: every 2 minutes. Submits pending lab orders with
+  // retry/backoff; flags exhausted/terminal ones for manual intervention.
+  const printSubmitJob = new Cron(
+    '*/2 * * * *',
+    { name: 'print-submit', protect: true },
+    async () => {
+      try {
+        const result = await runPrintSubmissions(db, { adapterResolver: printAdapterResolver });
+        if (result.processed > 0) printLog.info({ result }, 'print submission sweep complete');
+      } catch (err) {
+        printLog.error({ err }, 'print submission sweep failed');
+      }
+    },
+  );
+
+  // Print status poll: every 6h fallback for missed webhooks (manual re-poll
+  // nudges next_retry_at so the next sweep re-checks sooner).
+  const printPollJob = new Cron('0 */6 * * *', { name: 'print-poll', protect: true }, async () => {
+    try {
+      const result = await runPrintStatusPolls(db, { adapterResolver: printAdapterResolver });
+      if (result.processed > 0) printLog.info({ result }, 'print status poll complete');
+    } catch (err) {
+      printLog.error({ err }, 'print status poll failed');
+    }
+  });
+
+  return [retentionJob, payoutJob, slaJob, bipaJob, webhookJob, printSubmitJob, printPollJob];
 };

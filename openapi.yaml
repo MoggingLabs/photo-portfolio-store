@@ -1860,6 +1860,91 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orders/{id}/fulfillment:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getOrderFulfillment
+      tags: [commerce]
+      summary: Print fulfillment state for an order (F4.10)
+      description: Owner-gated. Returns each lab order's state + tracking.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Fulfillment view.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FulfillmentView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orders/{id}/fulfillment/poll:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: pollOrderFulfillment
+      tags: [commerce]
+      summary: Request a re-poll of an order's lab status (F4.10)
+      description: Owner-gated. Nudges the worker to re-check lab status sooner.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Re-poll requested.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requeued]
+                properties:
+                  requeued: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/webhooks/print-lab/{lab_code}:
+    parameters:
+      - name: lab_code
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: receivePrintLabWebhook
+      tags: [integrations]
+      summary: Inbound print-lab status webhook (F4.10)
+      description: >-
+        Public, validated by a per-lab HMAC signature over the raw body
+        (X-Webhook-Signature) + timestamp (X-Webhook-Timestamp, 5-min window).
+        Deduped on (lab_code, webhook_id).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [webhook_id, lab_order_id, status]
+              properties:
+                webhook_id: { type: string }
+                lab_order_id: { type: string }
+                status: { type: string }
+                tracking:
+                  type: object
+                  properties:
+                    carrier: { type: string }
+                    number: { type: string }
+                    url: { type: string, format: uri }
+      responses:
+        '200':
+          description: Event accepted (or a known duplicate).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [processed]
+                properties:
+                  processed: { type: boolean }
+                  reason: { type: string }
+                  newState: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServerError' }
   /v1/internal/payouts/run:
     post:
       operationId: runPayouts
@@ -2383,6 +2468,30 @@ components:
         enabled: { type: boolean }
         disabledReason: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
+    FulfillmentView:
+      type: object
+      required: [orderId, labOrders]
+      properties:
+        orderId: { $ref: '#/components/schemas/Uuid' }
+        labOrders:
+          type: array
+          items:
+            type: object
+            required: [id, labCode, labOrderId, state, tracking, needsManualIntervention, lastStatusAt]
+            properties:
+              id: { $ref: '#/components/schemas/Uuid' }
+              labCode: { type: string }
+              labOrderId: { type: string, nullable: true }
+              state: { type: string }
+              tracking:
+                type: object
+                nullable: true
+                properties:
+                  carrier: { type: string }
+                  number: { type: string }
+                  url: { type: string, format: uri }
+              needsManualIntervention: { type: boolean }
+              lastStatusAt: { type: string, format: date-time, nullable: true }
     WebhookDelivery:
       type: object
       required: [id, eventId, eventType, attempt, status, httpStatus, scheduledAt, deliveredAt, nextRetryAt]

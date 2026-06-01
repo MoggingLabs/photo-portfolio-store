@@ -105,6 +105,11 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   // (RBAC permissions do not model per-order ownership), like the downloads route.
   /^\/v1\/orders\/[^/]+$/,
   /^\/v1\/orders\/[^/]+\/refund-request$/,
+  // M4 F4.10 — order fulfillment view + manual re-poll; owner-gated in handler.
+  /^\/v1\/orders\/[^/]+\/fulfillment$/,
+  /^\/v1\/orders\/[^/]+\/fulfillment\/poll$/,
+  // M4 F4.10 — inbound print-lab webhook; public, per-lab HMAC-signature-gated.
+  /^\/v1\/webhooks\/print-lab\/[^/]+$/,
   // M2 F2.9 — Stripe Connect self-service routes; owner = request.user.
   /^\/v1\/me\/kyc\/(start|status)$/,
   // M2 F2.13 — payout dashboard self-service routes; owner = request.user.

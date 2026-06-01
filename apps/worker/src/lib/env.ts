@@ -21,6 +21,11 @@ export const workerEnvSchema = z.object({
   // here so the worker boots without it; the delivery job throws clearly if a
   // delivery is attempted while unset.
   INTEGRATIONS_MASTER_KEY: z.string().optional(),
+  // F4.10 — Bay Photo print-lab credentials. Optional: when unset the
+  // fulfillment sweep skips submissions (the adapter resolver returns null).
+  // NOTE: per-org credential resolution via integration_configs is a follow-up.
+  PRINT_BAYPHOTO_API_KEY: z.string().optional(),
+  PRINT_BAYPHOTO_BASE_URL: z.string().url().optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;

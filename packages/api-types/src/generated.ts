@@ -1246,6 +1246,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orders/{id}/fulfillment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Print fulfillment state for an order (F4.10)
+         * @description Owner-gated. Returns each lab order's state + tracking.
+         */
+        get: operations["getOrderFulfillment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders/{id}/fulfillment/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request a re-poll of an order's lab status (F4.10)
+         * @description Owner-gated. Nudges the worker to re-check lab status sooner.
+         */
+        post: operations["pollOrderFulfillment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/webhooks/print-lab/{lab_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lab_code: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inbound print-lab status webhook (F4.10)
+         * @description Public, validated by a per-lab HMAC signature over the raw body (X-Webhook-Signature) + timestamp (X-Webhook-Timestamp, 5-min window). Deduped on (lab_code, webhook_id).
+         */
+        post: operations["receivePrintLabWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/internal/payouts/run": {
         parameters: {
             query?: never;
@@ -1569,6 +1635,24 @@ export interface components {
             disabledReason: string | null;
             /** Format: date-time */
             createdAt: string;
+        };
+        FulfillmentView: {
+            orderId: components["schemas"]["Uuid"];
+            labOrders: {
+                id: components["schemas"]["Uuid"];
+                labCode: string;
+                labOrderId: string | null;
+                state: string;
+                tracking: {
+                    carrier?: string;
+                    number?: string;
+                    /** Format: uri */
+                    url?: string;
+                } | null;
+                needsManualIntervention: boolean;
+                /** Format: date-time */
+                lastStatusAt: string | null;
+            }[];
         };
         WebhookDelivery: {
             id: components["schemas"]["Uuid"];
@@ -4381,6 +4465,100 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getOrderFulfillment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fulfillment view. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FulfillmentView"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    pollOrderFulfillment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Re-poll requested. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        requeued: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    receivePrintLabWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lab_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    webhook_id: string;
+                    lab_order_id: string;
+                    status: string;
+                    tracking?: {
+                        carrier?: string;
+                        number?: string;
+                        /** Format: uri */
+                        url?: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Event accepted (or a known duplicate). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        processed: boolean;
+                        reason?: string;
+                        newState?: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServerError"];
         };
     };
     runPayouts: {
