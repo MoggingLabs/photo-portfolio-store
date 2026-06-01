@@ -59,6 +59,7 @@ export class RunSignupAdapter implements TimingProviderAdapter {
 
   async pullRoster(raceId: string): Promise<RosterEntry[]> {
     const res = await this.http(
+      'GET',
       `${this.baseUrl}/race/${raceId}/participants?format=json`,
       this.headers(),
     );
@@ -95,6 +96,7 @@ export class RunSignupAdapter implements TimingProviderAdapter {
     opts: PullFinishOptions = {},
   ): Promise<FinishEventRecord[]> {
     const res = await this.http(
+      'GET',
       `${this.baseUrl}/race/${raceId}/results?format=json`,
       this.headers(),
     );

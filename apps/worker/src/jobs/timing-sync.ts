@@ -93,12 +93,19 @@ export const runTimingSync = async (
         // provider has none — so only overwrite email when one is supplied.
         await db
           .insert(participants)
-          .values({ eventId: b.eventId, bib: entry.bib, name, email: entry.email ?? null })
+          .values({
+            eventId: b.eventId,
+            bib: entry.bib,
+            name,
+            email: entry.email ?? null,
+            transponderId: entry.transponderId ?? null,
+          })
           .onConflictDoUpdate({
             target: [participants.eventId, participants.bib],
             set: {
               name,
               ...(entry.email ? { email: entry.email } : {}),
+              ...(entry.transponderId ? { transponderId: entry.transponderId } : {}),
               updatedAt: now(),
             },
           });

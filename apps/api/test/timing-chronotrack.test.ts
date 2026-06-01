@@ -20,7 +20,7 @@ describe('ChronoTrackAdapter.pullRoster', () => {
       entry_last_name: 'B',
       entry_email: `r${i}@x.io`,
     }));
-    const http = vi.fn(async (url: string) => {
+    const http = vi.fn(async (_method: string, url: string) => {
       if (url.includes('page=1')) return { status: 200, body: { event_entry: page1 } };
       if (url.includes('page=2'))
         return {
@@ -31,7 +31,7 @@ describe('ChronoTrackAdapter.pullRoster', () => {
     });
     const roster = await make(http).pullRoster('e1');
     expect(roster).toHaveLength(51);
-    const [, headers] = http.mock.calls[0] as [string, Record<string, string>];
+    const [, , headers] = http.mock.calls[0] as [string, string, Record<string, string>];
     expect(headers.authorization).toBe(`Basic ${Buffer.from('u:t').toString('base64')}`);
     // stopped after the short second page (no third call).
     expect(http).toHaveBeenCalledTimes(2);

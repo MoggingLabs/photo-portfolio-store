@@ -50,7 +50,7 @@ describe('RunSignupAdapter.pullRoster', () => {
       age: 30,
       division: 'M30-34',
     });
-    const [, headers] = http.mock.calls[0] as [string, Record<string, string>];
+    const [, , headers] = http.mock.calls[0] as [string, string, Record<string, string>];
     expect(headers['X-RSU-API-KEY']).toBe('k');
   });
 

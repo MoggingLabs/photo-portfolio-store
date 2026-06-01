@@ -37,6 +37,8 @@ export const participants = app.table(
     email: text('email'),
     phone: text('phone'),
     team: text('team'),
+    // F4.8 — MyLaps transponder/chip id (nullable; indexed when present).
+    transponderId: text('transponder_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .default(sql`now()`),
@@ -49,6 +51,11 @@ export const participants = app.table(
     eventBibIdx: uniqueIndex('participants_event_bib_idx').on(table.eventId, table.bib),
     // Lookup by email within an event (notification targeting, F4.12).
     eventEmailIdx: index('participants_event_email_idx').on(table.eventId, table.email),
+    // F4.8 — transponder lookup within an event.
+    eventTransponderIdx: index('participants_event_transponder_idx').on(
+      table.eventId,
+      table.transponderId,
+    ),
   }),
 );
 

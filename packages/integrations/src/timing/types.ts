@@ -16,6 +16,8 @@ export interface RosterEntry {
   age?: number;
   gender?: string;
   division?: string;
+  // MyLaps (F4.8): transponder/chip id assigned to the entrant.
+  transponderId?: string;
 }
 
 export interface FinishEventRecord {
@@ -58,9 +60,13 @@ export interface TimingHttpResponse {
   body: unknown;
 }
 
+export type TimingHttpMethod = 'GET' | 'POST';
+
 export type TimingHttpClient = (
+  method: TimingHttpMethod,
   url: string,
   headers: Record<string, string>,
+  body?: unknown,
 ) => Promise<TimingHttpResponse>;
 
 export const timingErrorForStatus = (status: number, message: string): TimingProviderError => {

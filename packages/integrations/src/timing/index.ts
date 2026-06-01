@@ -3,6 +3,7 @@
 export * from './types.js';
 export { RunSignupAdapter, type RunSignupOptions, parseClockToMs } from './runsignup.js';
 export { ChronoTrackAdapter, type ChronoTrackOptions } from './chronotrack.js';
+export { MyLapsAdapter, type MyLapsOptions } from './mylaps.js';
 
 export const TIMING_PROVIDERS = ['runsignup', 'chronotrack', 'mylaps'] as const;
 

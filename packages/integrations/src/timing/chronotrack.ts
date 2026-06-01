@@ -51,6 +51,7 @@ export class ChronoTrackAdapter implements TimingProviderAdapter {
     const entries: RosterEntry[] = [];
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const res = await this.http(
+        'GET',
         `${this.baseUrl}/event/${eventId}/entry?format=json&page=${page}&size=${PAGE_SIZE}`,
         this.headers(),
       );
@@ -84,6 +85,7 @@ export class ChronoTrackAdapter implements TimingProviderAdapter {
     opts: PullFinishOptions = {},
   ): Promise<FinishEventRecord[]> {
     const res = await this.http(
+      'GET',
       `${this.baseUrl}/event/${eventId}/results?format=json`,
       this.headers(),
     );

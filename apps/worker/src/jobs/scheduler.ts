@@ -6,6 +6,7 @@ import {
   BayPhotoAdapter,
   ChronoTrackAdapter,
   type LabHttpClient,
+  MyLapsAdapter,
   type PrintLabAdapter,
   RunSignupAdapter,
   type TimingHttpClient,
@@ -85,10 +86,19 @@ const printAdapterResolver: AdapterResolver = (labCode): PrintLabAdapter | null 
   return null;
 };
 
-const timingHttpClient: TimingHttpClient = async (url, headers) => {
+const timingHttpClient: TimingHttpClient = async (method, url, headers, body) => {
+  // Form-encode token requests (OAuth client-credentials), JSON otherwise.
+  const isForm = headers['content-type']?.includes('x-www-form-urlencoded');
+  const encodedBody =
+    body === undefined
+      ? undefined
+      : isForm
+        ? new URLSearchParams(body as Record<string, string>).toString()
+        : JSON.stringify(body);
   const res = await request(url, {
-    method: 'GET',
+    method,
     headers,
+    ...(encodedBody !== undefined ? { body: encodedBody } : {}),
     headersTimeout: WEBHOOK_TIMEOUT_MS,
     bodyTimeout: WEBHOOK_TIMEOUT_MS,
   });
@@ -119,6 +129,16 @@ const timingAdapterFactory: TimingAdapterFactory = (
     return new ChronoTrackAdapter({
       username: credential.slice(0, idx),
       userToken: credential.slice(idx + 1),
+      httpClient: timingHttpClient,
+    });
+  }
+  if (provider === 'mylaps') {
+    // Credential format: "client_id:client_secret".
+    const idx = credential.indexOf(':');
+    if (idx <= 0) return null;
+    return new MyLapsAdapter({
+      clientId: credential.slice(0, idx),
+      clientSecret: credential.slice(idx + 1),
       httpClient: timingHttpClient,
     });
   }
