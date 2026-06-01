@@ -14,6 +14,7 @@ export default defineConfig({
     './src/schema/compliance.ts',
     './src/schema/integrations.ts',
     './src/schema/participants.ts',
+    './src/schema/print.ts',
     './src/schema/webhooks.ts',
   ],
   out: './migrations',
