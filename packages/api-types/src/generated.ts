@@ -1159,6 +1159,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/{id}/sftp/provision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provision a per-event SFTP account (F4.2)
+         * @description Generates an ed25519 key pair. The private key (PKCS8 PEM) is returned exactly once and never stored — only the fingerprint is persisted.
+         */
+        post: operations["provisionSftp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{id}/sftp/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate the per-event SFTP key (F4.2) */
+        post: operations["rotateSftp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{id}/sftp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        /** Per-event SFTP account status (F4.2) */
+        get: operations["getSftpAccount"];
+        put?: never;
+        post?: never;
+        /** Disable the per-event SFTP account (F4.2) */
+        delete: operations["disableSftp"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events/{id}/notifications/preview": {
         parameters: {
             query?: never;
@@ -1749,6 +1810,18 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             issues: components["schemas"]["RosterIssue"][];
+        };
+        SftpAccount: {
+            systemUsername: string;
+            chrootPath: string;
+            publicKeyFingerprint: string;
+            /** @enum {string} */
+            status: "active" | "disabled";
+        };
+        SftpProvisionResult: components["schemas"]["SftpAccount"] & {
+            opensshPublicKey: string;
+            /** @description Returned exactly once; never stored. */
+            privateKeyPem: string;
         };
         /** @enum {string} */
         TimingProvider: "runsignup" | "chronotrack" | "mylaps";
@@ -4426,6 +4499,105 @@ export interface operations {
                         items: components["schemas"]["TimingBinding"][];
                     };
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    provisionSftp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account created; private key returned once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SftpProvisionResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    rotateSftp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New key minted; private key returned once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SftpProvisionResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getSftpAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account status (no key material). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SftpAccount"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    disableSftp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account disabled. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

@@ -20,5 +20,6 @@ export * as integrations from './integrations.js';
 export * as notifications from './notifications.js';
 export * as participants from './participants.js';
 export * as print from './print.js';
+export * as sftp from './sftp.js';
 export * as timing from './timing.js';
 export * as webhooks from './webhooks.js';

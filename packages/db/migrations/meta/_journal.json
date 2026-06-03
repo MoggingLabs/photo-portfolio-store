@@ -127,6 +127,13 @@
       "when": 1780512307438,
       "tag": "0017_participant_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780598707438,
+      "tag": "0018_sftp",
+      "breakpoints": true
     }
   ]
 }

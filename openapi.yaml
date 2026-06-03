@@ -1699,6 +1699,71 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events/{id}/sftp/provision:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: provisionSftp
+      tags: [integrations]
+      summary: Provision a per-event SFTP account (F4.2)
+      description: >-
+        Generates an ed25519 key pair. The private key (PKCS8 PEM) is returned
+        exactly once and never stored — only the fingerprint is persisted.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Account created; private key returned once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SftpProvisionResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/events/{id}/sftp/rotate:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: rotateSftp
+      tags: [integrations]
+      summary: Rotate the per-event SFTP key (F4.2)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: New key minted; private key returned once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SftpProvisionResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events/{id}/sftp:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getSftpAccount
+      tags: [integrations]
+      summary: Per-event SFTP account status (F4.2)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Account status (no key material).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SftpAccount' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: disableSftp
+      tags: [integrations]
+      summary: Disable the per-event SFTP account (F4.2)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Account disabled. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/events/{id}/notifications/preview:
     parameters:
       - $ref: '#/components/parameters/IdParam'
@@ -2623,6 +2688,22 @@ components:
         issues:
           type: array
           items: { $ref: '#/components/schemas/RosterIssue' }
+    SftpAccount:
+      type: object
+      required: [systemUsername, chrootPath, publicKeyFingerprint, status]
+      properties:
+        systemUsername: { type: string }
+        chrootPath: { type: string }
+        publicKeyFingerprint: { type: string }
+        status: { type: string, enum: [active, disabled] }
+    SftpProvisionResult:
+      allOf:
+        - $ref: '#/components/schemas/SftpAccount'
+        - type: object
+          required: [opensshPublicKey, privateKeyPem]
+          properties:
+            opensshPublicKey: { type: string }
+            privateKeyPem: { type: string, description: Returned exactly once; never stored. }
     TimingProvider:
       type: string
       enum: [runsignup, chronotrack, mylaps]

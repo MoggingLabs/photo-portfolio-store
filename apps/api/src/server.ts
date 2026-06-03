@@ -40,6 +40,7 @@ import refundsRoutes from './routes/refunds.js';
 import rosterRoutes from './routes/roster.js';
 import searchFaceRoutes from './routes/search-face.js';
 import searchRoutes from './routes/search.js';
+import sftpRoutes from './routes/sftp.js';
 import takedownRoutes from './routes/takedowns.js';
 import timingRoutes from './routes/timing.js';
 import uploadsRoutes from './routes/uploads.js';
@@ -156,6 +157,8 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(rosterRoutes);
   // M4 F4.6+ — timing provider bindings (event:write, event-scoped).
   await app.register(timingRoutes);
+  // M4 F4.2 — per-event SFTP provisioning (event:write, event-scoped).
+  await app.register(sftpRoutes);
   // M4 F4.12 — "photos are ready" notifications (operator preview/resend + me).
   await app.register(notificationRoutes);
   // M4 F4.11 — outbound webhook subscriptions (integrations:manage, org-scoped).

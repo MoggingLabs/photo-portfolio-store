@@ -16,6 +16,7 @@ export default defineConfig({
     './src/schema/notifications.ts',
     './src/schema/participants.ts',
     './src/schema/print.ts',
+    './src/schema/sftp.ts',
     './src/schema/timing.ts',
     './src/schema/webhooks.ts',
   ],
