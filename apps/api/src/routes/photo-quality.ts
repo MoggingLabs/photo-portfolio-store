@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { db as defaultDb } from '../lib/db.js';
 import { getPhotoQuality } from '../services/photo-quality.js';
+import { overrideRejection } from '../services/photographer-quality-settings.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 
@@ -33,6 +34,17 @@ const photoQualityRoutes = async (
     const detail = await getPhotoQuality(db, params.data.id, userId);
     if (!detail) return reply.code(404).send({ error: 'not_found' });
     return reply.code(200).send(detail);
+  });
+
+  // F5.5 — republish an auto-rejected photo (owner-gated; 404 anti-enumeration).
+  app.post('/v1/photos/:id/override-rejection', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) return reply.code(401).send({ error: 'unauthorized' });
+    const params = idParamSchema.safeParse(request.params);
+    if (!params.success) return reply.code(404).send({ error: 'not_found' });
+    const ok = await overrideRejection(db, params.data.id, userId);
+    if (!ok) return reply.code(404).send({ error: 'not_found' });
+    return reply.code(200).send({ photoId: params.data.id, autoRejected: false });
   });
 };
 

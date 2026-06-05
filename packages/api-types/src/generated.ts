@@ -1727,6 +1727,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/photographer/quality-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the caller's quality auto-reject settings (F5.5) */
+        get: operations["getQualitySettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the caller's quality auto-reject settings (F5.5)
+         * @description Enable/disable the filter and/or set the 0-1 threshold; at least one field required.
+         */
+        patch: operations["updateQualitySettings"];
+        trace?: never;
+    };
+    "/v1/photos/{id}/override-rejection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Republish an auto-rejected photo (F5.5)
+         * @description Owner-gated. Clears auto_rejected and stamps the override so the quality worker never re-rejects it. 404 for missing or not-owned photos.
+         */
+        post: operations["overridePhotoRejection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/photos/{id}/quality": {
         parameters: {
             query?: never;
@@ -1920,6 +1963,10 @@ export interface components {
             completedAt: string | null;
             lastError: string | null;
             etaSeconds: number | null;
+        };
+        QualitySettings: {
+            enabled: boolean;
+            threshold: number;
         };
         /** @enum {string} */
         WebhookEventType: "order.paid" | "photos.ready_for_bib" | "event.published";
@@ -5478,6 +5525,8 @@ export interface operations {
             query?: {
                 quality_flag?: "blur" | "eyes_closed" | "near_duplicate";
                 event_id?: components["schemas"]["Uuid"];
+                /** @description When 'true', returns only auto-rejected photos (F5.5 review tab). */
+                rejected?: "true";
                 cursor?: string;
                 limit?: number;
             };
@@ -5502,6 +5551,8 @@ export interface operations {
                             status: string;
                             hidden: boolean;
                             blurScore: number | null;
+                            qualityScore: number | null;
+                            autoRejected: boolean;
                             qualityFlags: {
                                 [key: string]: unknown;
                             } | null;
@@ -5514,6 +5565,83 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getQualitySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualitySettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateQualitySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled?: boolean;
+                    threshold?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualitySettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    overridePhotoRejection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo republished. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        photoId: components["schemas"]["Uuid"];
+                        autoRejected: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getPhotoQuality: {

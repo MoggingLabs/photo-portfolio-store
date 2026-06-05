@@ -8,6 +8,7 @@ export default defineConfig({
     './src/schema/users.ts',
     './src/schema/events.ts',
     './src/schema/photos.ts',
+    './src/schema/photographer-settings.ts',
     './src/schema/search.ts',
     './src/schema/catalog.ts',
     './src/schema/commerce.ts',

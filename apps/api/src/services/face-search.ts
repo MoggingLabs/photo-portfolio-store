@@ -299,12 +299,19 @@ export const runFaceSearch = async (
     const photoIds = Array.from(new Set(vectorRows.map((r) => r.photoId)));
     if (photoIds.length > 0) {
       const photoRows = await db
-        .select({ id: photos.id, status: photos.status, hidden: photos.hidden })
+        .select({
+          id: photos.id,
+          status: photos.status,
+          hidden: photos.hidden,
+          autoRejected: photos.autoRejected,
+        })
         .from(photos)
         .where(inArray(photos.id, photoIds));
 
       const viable = new Set(
-        photoRows.filter((p) => p.status === 'ready' && p.hidden === false).map((p) => p.id),
+        photoRows
+          .filter((p) => p.status === 'ready' && p.hidden === false && p.autoRejected === false)
+          .map((p) => p.id),
       );
 
       // Pick best score per photoId.

@@ -28,11 +28,17 @@ import { db as defaultDb } from '../lib/db.js';
 import { workerEnv } from '../lib/env.js';
 import { type QualityResponse, scoreQuality } from '../lib/inference-client.js';
 import { logger } from '../lib/logger.js';
-import { analyzeImage, hammingDistance } from '../lib/quality.js';
+import {
+  QUALITY_SCORE_VERSION,
+  analyzeImage,
+  computeQualityScore,
+  hammingDistance,
+} from '../lib/quality.js';
 import { buckets as defaultBuckets, getS3 } from '../lib/storage.js';
 import type { QualityJobData } from '../queues/quality.js';
 
 const { photos } = schema.photos;
+const { photographerSettings } = schema.photographerSettings;
 
 export interface EyesClosedFlag {
   faces: number;
@@ -43,6 +49,8 @@ export interface QualityFlags {
   near_duplicate_of?: string;
   duplicate_group_id?: string;
   eyes_closed?: EyesClosedFlag;
+  // F5.5 — version of the heuristic that produced quality_score.
+  score_version?: number;
 }
 
 export interface QualityThresholds {
@@ -73,6 +81,8 @@ export interface QualityResult {
   blurScore?: number;
   phash?: string;
   flags?: QualityFlags;
+  qualityScore?: number;
+  autoRejected?: boolean;
 }
 
 const streamToBuffer = async (body: unknown): Promise<Buffer> => {
@@ -123,7 +133,9 @@ export const processQuality = async (
       .select({
         id: photos.id,
         eventId: photos.eventId,
+        photographerUserId: photos.photographerUserId,
         originalObjectKey: photos.originalObjectKey,
+        rejectionOverriddenAt: photos.rejectionOverriddenAt,
       })
       .from(photos)
       .where(sql`${photos.id} = ${photoId}`)
@@ -207,12 +219,32 @@ export const processQuality = async (
         .where(sql`${photos.id} = ${nearest.id}`);
     }
 
+    // F5.5 — normalized 0-1 quality score + opt-in auto-reject. Never re-reject a
+    // photo the photographer already published (rejection_overridden_at set).
+    const qualityScore = computeQualityScore(blurScore, eyesClosed?.faces ?? 0, blurThreshold);
+    flags.score_version = QUALITY_SCORE_VERSION;
+    let autoRejected = false;
+    if (photo.rejectionOverriddenAt === null) {
+      const settingsRows = await dbClient
+        .select({
+          enabled: photographerSettings.qualityFilterEnabled,
+          threshold: photographerSettings.qualityThreshold,
+        })
+        .from(photographerSettings)
+        .where(sql`${photographerSettings.photographerUserId} = ${photo.photographerUserId}`)
+        .limit(1);
+      const settings = settingsRows[0];
+      if (settings?.enabled && qualityScore < Number(settings.threshold)) autoRejected = true;
+    }
+
     await dbClient
       .update(photos)
       .set({
         blurScore: blurScore.toFixed(2),
         phash,
         qualityFlags: flags,
+        qualityScore: qualityScore.toFixed(2),
+        autoRejected,
         updatedAt: new Date(),
       })
       .where(sql`${photos.id} = ${photoId}`);
@@ -227,15 +259,22 @@ export const processQuality = async (
         blur: flags.blur,
         nearDuplicateOf: flags.near_duplicate_of ?? null,
         eyesClosedFaces: flags.eyes_closed?.faces ?? 0,
+        qualityScore,
+        autoRejected,
       },
     });
 
-    logger.info({ photoId, blurScore, blur: flags.blur }, 'quality: scored');
+    logger.info(
+      { photoId, blurScore, blur: flags.blur, qualityScore, autoRejected },
+      'quality: scored',
+    );
     return {
       status: 'scored',
       blurScore,
       phash: phash.toString(),
       flags,
+      qualityScore,
+      autoRejected,
     };
   } catch (error) {
     Sentry.captureException(error, { tags: { worker: 'quality', photoId } });

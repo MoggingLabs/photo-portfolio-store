@@ -7,7 +7,10 @@ const hoisted = vi.hoisted(() => ({ getPhotographerStats: vi.fn() }));
 
 // schema.photos.photos must exist: the route transitively imports
 // photo-quality.js, which destructures `schema.photos` at module load.
-vi.mock('@pkg/db', () => ({ createDbClient: () => ({}), schema: { photos: { photos: {} } } }));
+vi.mock('@pkg/db', () => ({
+  createDbClient: () => ({}),
+  schema: { photos: { photos: {} }, photographerSettings: { photographerSettings: {} } },
+}));
 vi.mock('../src/services/photographer-stats.js', () => ({
   getPhotographerStats: hoisted.getPhotographerStats,
 }));

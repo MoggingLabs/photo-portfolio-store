@@ -2458,6 +2458,11 @@ paths:
           in: query
           required: false
           schema: { $ref: '#/components/schemas/Uuid' }
+        - name: rejected
+          in: query
+          required: false
+          description: When 'true', returns only auto-rejected photos (F5.5 review tab).
+          schema: { type: string, enum: ['true'] }
         - { name: cursor, in: query, required: false, schema: { type: string } }
         - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
       responses:
@@ -2475,18 +2480,81 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [photoId, eventId, status, hidden, blurScore, qualityFlags, duplicateGroupId, createdAt]
+                      required: [photoId, eventId, status, hidden, blurScore, qualityScore, autoRejected, qualityFlags, duplicateGroupId, createdAt]
                       properties:
                         photoId: { $ref: '#/components/schemas/Uuid' }
                         eventId: { $ref: '#/components/schemas/Uuid' }
                         status: { type: string }
                         hidden: { type: boolean }
                         blurScore: { type: number, nullable: true }
+                        qualityScore: { type: number, nullable: true }
+                        autoRejected: { type: boolean }
                         qualityFlags: { type: object, nullable: true, additionalProperties: true }
                         duplicateGroupId: { type: string, nullable: true }
                         createdAt: { type: string, format: date-time }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/me/photographer/quality-settings:
+    get:
+      operationId: getQualitySettings
+      tags: [compliance]
+      summary: Get the caller's quality auto-reject settings (F5.5)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualitySettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      operationId: updateQualitySettings
+      tags: [compliance]
+      summary: Update the caller's quality auto-reject settings (F5.5)
+      description: Enable/disable the filter and/or set the 0-1 threshold; at least one field required.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                enabled: { type: boolean }
+                threshold: { type: number, minimum: 0, maximum: 1 }
+      responses:
+        '200':
+          description: Updated settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualitySettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/photos/{id}/override-rejection:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: overridePhotoRejection
+      tags: [compliance]
+      summary: Republish an auto-rejected photo (F5.5)
+      description: >-
+        Owner-gated. Clears auto_rejected and stamps the override so the quality
+        worker never re-rejects it. 404 for missing or not-owned photos.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Photo republished.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photoId, autoRejected]
+                properties:
+                  photoId: { $ref: '#/components/schemas/Uuid' }
+                  autoRejected: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/photos/{id}/quality:
     parameters:
       - $ref: '#/components/parameters/IdParam'
@@ -2840,6 +2908,12 @@ components:
         completedAt: { type: string, format: date-time, nullable: true }
         lastError: { type: string, nullable: true }
         etaSeconds: { type: integer, nullable: true }
+    QualitySettings:
+      type: object
+      required: [enabled, threshold]
+      properties:
+        enabled: { type: boolean }
+        threshold: { type: number, minimum: 0, maximum: 1 }
     WebhookEventType:
       type: string
       enum: [order.paid, photos.ready_for_bib, event.published]

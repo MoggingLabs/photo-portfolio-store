@@ -149,6 +149,28 @@ export interface ImageQualityScores {
   phash: bigint;
 }
 
+// F5.5 — quality-score heuristic version. Stored alongside the score so a future
+// learned model can re-score old photos without ambiguity.
+export const QUALITY_SCORE_VERSION = 1;
+
+/**
+ * Normalize the raw quality signals into a 0-1 score (higher = better). Blur is
+ * the primary signal: the Laplacian variance is anchored so a photo at the blur
+ * threshold scores ~0.5 and one at 2x the threshold scores ~1.0. Eyes-closed
+ * applies a multiplicative penalty. Heuristic v1 — a learned model can replace
+ * this without a schema change (the version is persisted with the score).
+ */
+export const computeQualityScore = (
+  blurScore: number,
+  eyesClosedFaces: number,
+  blurThreshold: number,
+): number => {
+  const anchor = blurThreshold > 0 ? blurThreshold : 1;
+  const blurNorm = Math.min(1, Math.max(0, blurScore / (anchor * 2)));
+  const eyesPenalty = eyesClosedFaces > 0 ? 0.6 : 1;
+  return Math.round(blurNorm * eyesPenalty * 100) / 100;
+};
+
 /**
  * Decode `buffer` with sharp and compute blur + perceptual hash. Kept thin: all
  * the math lives in the exported pure functions above.

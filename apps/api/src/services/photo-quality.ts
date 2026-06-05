@@ -38,6 +38,8 @@ export interface PhotoQualityListItem {
   status: string;
   hidden: boolean;
   blurScore: number | null;
+  qualityScore: number | null;
+  autoRejected: boolean;
   qualityFlags: QualityFlagsShape | null;
   duplicateGroupId: string | null;
   createdAt: string;
@@ -66,6 +68,8 @@ const toListItem = (row: {
   status: string;
   hidden: boolean;
   blurScore: string | null;
+  qualityScore: string | null;
+  autoRejected: boolean;
   qualityFlags: unknown;
   createdAt: Date;
 }): PhotoQualityListItem => {
@@ -76,6 +80,8 @@ const toListItem = (row: {
     status: row.status,
     hidden: row.hidden,
     blurScore: row.blurScore !== null ? Number(row.blurScore) : null,
+    qualityScore: row.qualityScore !== null ? Number(row.qualityScore) : null,
+    autoRejected: row.autoRejected,
     qualityFlags: flags,
     duplicateGroupId: flags?.duplicate_group_id ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -85,7 +91,13 @@ const toListItem = (row: {
 export const listPhotographerPhotos = async (
   db: DbClient,
   photographerUserId: string,
-  opts: { eventId?: string; qualityFlag?: QualityFlagFilter; cursor?: string; limit?: number } = {},
+  opts: {
+    eventId?: string;
+    qualityFlag?: QualityFlagFilter;
+    onlyRejected?: boolean;
+    cursor?: string;
+    limit?: number;
+  } = {},
 ): Promise<ListPhotographerPhotosResult> => {
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const cursor: CursorPayload | null = decodeCursor(opts.cursor);
@@ -93,6 +105,8 @@ export const listPhotographerPhotos = async (
   const filters = [eq(photos.photographerUserId, photographerUserId)];
   if (opts.eventId) filters.push(eq(photos.eventId, opts.eventId));
   if (opts.qualityFlag) filters.push(flagPredicate(opts.qualityFlag));
+  // F5.5 — the photographer's auto-rejected review tab.
+  if (opts.onlyRejected) filters.push(eq(photos.autoRejected, true));
   // Keyset: rows strictly older than the cursor (createdAt, id) tuple.
   if (cursor) {
     filters.push(sql`(${photos.createdAt}, ${photos.id}) < (${cursor.createdAt}, ${cursor.id})`);
@@ -105,6 +119,8 @@ export const listPhotographerPhotos = async (
       status: photos.status,
       hidden: photos.hidden,
       blurScore: photos.blurScore,
+      qualityScore: photos.qualityScore,
+      autoRejected: photos.autoRejected,
       qualityFlags: photos.qualityFlags,
       createdAt: photos.createdAt,
     })

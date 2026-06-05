@@ -123,6 +123,9 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   // within the handlers (RBAC does not model per-photo ownership).
   /^\/v1\/me\/photographer\/photos$/,
   /^\/v1\/photos\/[^/]+\/quality$/,
+  // M5 F5.5 — quality auto-reject settings + manual override; owner = request.user.
+  /^\/v1\/me\/photographer\/quality-settings$/,
+  /^\/v1\/photos\/[^/]+\/override-rejection$/,
   // M2 F2.12 — internal cron-trigger; machine-to-machine, secret-gated (not RBAC).
   /^\/v1\/internal\/payouts\/run$/,
   // M4 F4.12 — internal notification enqueue trigger; secret-gated (not RBAC).

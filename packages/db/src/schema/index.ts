@@ -11,6 +11,7 @@
 export * as users from './users.js';
 export * as events from './events.js';
 export * as photos from './photos.js';
+export * as photographerSettings from './photographer-settings.js';
 export * as search from './search.js';
 export * as catalog from './catalog.js';
 export * as commerce from './commerce.js';

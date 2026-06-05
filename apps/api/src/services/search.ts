@@ -204,6 +204,7 @@ const queryBibMatches = async (
     sql`lower(${bibTags.bibNumber}) = lower(${args.bibNumber})`,
     eq(photos.status, 'ready'),
     eq(photos.hidden, false),
+    eq(photos.autoRejected, false),
   ];
 
   if (args.cursor) {

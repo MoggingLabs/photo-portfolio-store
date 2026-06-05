@@ -4,7 +4,7 @@ import { Buffer } from 'node:buffer';
 import type { Job } from 'bullmq';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { computePhashFromGray } from '../src/lib/quality.js';
+import { computePhashFromGray, computeQualityScore } from '../src/lib/quality.js';
 import type { QualityJobData } from '../src/queues/quality.js';
 
 const marker = (key: string): Record<string, unknown> => ({ __table: key });
@@ -16,9 +16,20 @@ vi.mock('@pkg/db', () => ({
       photos: {
         id: { column: 'id' },
         eventId: { column: 'eventId' },
+        photographerUserId: { column: 'photographerUserId' },
         originalObjectKey: { column: 'originalObjectKey' },
+        rejectionOverriddenAt: { column: 'rejectionOverriddenAt' },
         phash: { column: 'phash' },
         qualityFlags: { column: 'qualityFlags' },
+        qualityScore: { column: 'qualityScore' },
+        autoRejected: { column: 'autoRejected' },
+      },
+    },
+    photographerSettings: {
+      photographerSettings: {
+        photographerUserId: { column: 'photographerUserId' },
+        qualityFilterEnabled: { column: 'qualityFilterEnabled' },
+        qualityThreshold: { column: 'qualityThreshold' },
       },
     },
     compliance: { auditLog: marker('auditLog') },
@@ -68,15 +79,20 @@ interface UpdateCall {
   set: Record<string, unknown>;
 }
 
-const makeDb = (photoRow: Record<string, unknown>, candidates: Record<string, unknown>[]) => {
+const makeDb = (
+  photoRow: Record<string, unknown>,
+  candidates: Record<string, unknown>[],
+  settingsRows: Record<string, unknown>[] = [],
+) => {
   let selectCall = 0;
   const updates: UpdateCall[] = [];
   const inserts: Record<string, unknown>[] = [];
 
+  // Select order: 0 = the photo, 1 = near-dup candidates, 2 = photographer settings.
   const select = vi.fn(() => {
     const idx = selectCall;
     selectCall += 1;
-    const result = idx === 0 ? [photoRow] : candidates;
+    const result = idx === 0 ? [photoRow] : idx === 1 ? candidates : settingsRows;
     const builder: Record<string, unknown> = {
       from: () => builder,
       where: () => builder,
@@ -253,5 +269,97 @@ describe('processQuality', () => {
     expect(result.flags?.duplicate_group_id).toBe('group-existing');
     const selfFlags = updates[1]?.set.qualityFlags as Record<string, unknown>;
     expect(selfFlags.duplicate_group_id).toBe('group-existing');
+  });
+
+  it('auto-rejects a below-threshold photo when the filter is enabled', async () => {
+    const photo = {
+      id: 'p6',
+      eventId: 'e1',
+      photographerUserId: 'ph1',
+      originalObjectKey: 'originals/e1/p6.jpg',
+      rejectionOverriddenAt: null,
+    };
+    const { db, updates } = makeDb(photo, [], [{ enabled: true, threshold: '0.50' }]);
+    const result = await processQuality(buildJob('p6'), {
+      ...baseDeps,
+      sharpFactory: makeSharpStub(),
+      s3: makeS3() as never,
+      db,
+    });
+    // Uniform luma => blur variance 0 => quality score 0 < 0.50 => rejected.
+    expect(result.qualityScore).toBe(0);
+    expect(result.autoRejected).toBe(true);
+    expect(updates[0]?.set.autoRejected).toBe(true);
+    expect(updates[0]?.set.qualityScore).toBe('0.00');
+  });
+
+  it('does not reject when the filter is disabled', async () => {
+    const photo = {
+      id: 'p7',
+      eventId: 'e1',
+      photographerUserId: 'ph1',
+      originalObjectKey: 'originals/e1/p7.jpg',
+      rejectionOverriddenAt: null,
+    };
+    const { db, updates } = makeDb(photo, [], [{ enabled: false, threshold: '0.50' }]);
+    const result = await processQuality(buildJob('p7'), {
+      ...baseDeps,
+      sharpFactory: makeSharpStub(),
+      s3: makeS3() as never,
+      db,
+    });
+    expect(result.autoRejected).toBe(false);
+    expect(updates[0]?.set.autoRejected).toBe(false);
+  });
+
+  it('does not reject when the photographer has no settings row', async () => {
+    const photo = {
+      id: 'p8',
+      eventId: 'e1',
+      photographerUserId: 'ph1',
+      originalObjectKey: 'originals/e1/p8.jpg',
+      rejectionOverriddenAt: null,
+    };
+    const { db } = makeDb(photo, [], []);
+    const result = await processQuality(buildJob('p8'), {
+      ...baseDeps,
+      sharpFactory: makeSharpStub(),
+      s3: makeS3() as never,
+      db,
+    });
+    expect(result.autoRejected).toBe(false);
+  });
+
+  it('never re-rejects a photo the photographer already overrode', async () => {
+    const photo = {
+      id: 'p9',
+      eventId: 'e1',
+      photographerUserId: 'ph1',
+      originalObjectKey: 'originals/e1/p9.jpg',
+      rejectionOverriddenAt: new Date('2026-06-01T00:00:00Z'),
+    };
+    // Settings would reject, but the override short-circuits the lookup.
+    const { db, updates } = makeDb(photo, [], [{ enabled: true, threshold: '0.90' }]);
+    const result = await processQuality(buildJob('p9'), {
+      ...baseDeps,
+      sharpFactory: makeSharpStub(),
+      s3: makeS3() as never,
+      db,
+    });
+    expect(result.autoRejected).toBe(false);
+    expect(updates[0]?.set.autoRejected).toBe(false);
+  });
+});
+
+describe('computeQualityScore', () => {
+  it('anchors the blur threshold at ~0.5 and clamps to [0,1]', () => {
+    expect(computeQualityScore(0, 0, 50)).toBe(0);
+    expect(computeQualityScore(50, 0, 50)).toBe(0.5);
+    expect(computeQualityScore(100, 0, 50)).toBe(1);
+    expect(computeQualityScore(400, 0, 50)).toBe(1); // clamped
+  });
+
+  it('penalizes eyes-closed photos', () => {
+    expect(computeQualityScore(100, 1, 50)).toBe(0.6); // 1 * 0.6
   });
 });

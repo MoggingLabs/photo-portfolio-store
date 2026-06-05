@@ -336,7 +336,12 @@ const installFieldShims = async (): Promise<void> => {
     'bib',
     'name',
   ]);
-  tag(schema.photos.tables.photos as Record<string, unknown>, ['id', 'status', 'hidden']);
+  tag(schema.photos.tables.photos as Record<string, unknown>, [
+    'id',
+    'status',
+    'hidden',
+    'autoRejected',
+  ]);
   tag(schema.photos.tables.photoDerivatives as Record<string, unknown>, [
     'photoId',
     'kind',
@@ -426,9 +431,9 @@ const seedDraftEvent = (): void => {
 
 const seedPhotos = (): void => {
   store.photos.push(
-    { id: PHOTO_A, status: 'ready', hidden: false },
-    { id: PHOTO_B, status: 'ready', hidden: false },
-    { id: PHOTO_HIDDEN, status: 'ready', hidden: true },
+    { id: PHOTO_A, status: 'ready', hidden: false, autoRejected: false },
+    { id: PHOTO_B, status: 'ready', hidden: false, autoRejected: false },
+    { id: PHOTO_HIDDEN, status: 'ready', hidden: true, autoRejected: false },
   );
 };
 

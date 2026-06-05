@@ -353,7 +353,12 @@ const installFieldShims = async (): Promise<void> => {
     'eventId',
     'payloadJsonb',
   ]);
-  tag(schema.photos.tables.photos as Record<string, unknown>, ['id', 'status', 'hidden']);
+  tag(schema.photos.tables.photos as Record<string, unknown>, [
+    'id',
+    'status',
+    'hidden',
+    'autoRejected',
+  ]);
   tag(schema.photos.tables.photoDerivatives as Record<string, unknown>, [
     'photoId',
     'kind',
@@ -403,7 +408,7 @@ const seedFixture = (): void => {
   });
   // event_settings row (same bucket; we share the events bucket in mock).
   store.events.push({ eventId: EVENT_ID, faceThreshold: '0.40' });
-  store.photos.push({ id: PHOTO_ID, status: 'ready', hidden: false });
+  store.photos.push({ id: PHOTO_ID, status: 'ready', hidden: false, autoRejected: false });
   store.faceVectors.push({
     id: fakeUuid(),
     eventId: EVENT_ID,

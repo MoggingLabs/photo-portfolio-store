@@ -7,7 +7,10 @@ const hoisted = vi.hoisted(() => ({
   getPhotoQuality: vi.fn(),
 }));
 
-vi.mock('@pkg/db', () => ({ createDbClient: () => ({}), schema: {} }));
+vi.mock('@pkg/db', () => ({
+  createDbClient: () => ({}),
+  schema: { photos: { photos: {} }, photographerSettings: { photographerSettings: {} } },
+}));
 
 vi.mock('../src/services/photo-quality.js', () => ({
   getPhotoQuality: hoisted.getPhotoQuality,

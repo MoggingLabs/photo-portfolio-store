@@ -11,6 +11,10 @@ import { z } from 'zod';
 import { db as defaultDb } from '../lib/db.js';
 import { listPhotographerPhotos } from '../services/photo-quality.js';
 import {
+  getQualitySettings,
+  updateQualitySettings,
+} from '../services/photographer-quality-settings.js';
+import {
   type PhotographerStats,
   type StatsRange,
   getPhotographerStats,
@@ -23,9 +27,22 @@ const querySchema = z.object({
 const photosQuerySchema = z.object({
   quality_flag: z.enum(['blur', 'eyes_closed', 'near_duplicate']).optional(),
   event_id: z.string().uuid().optional(),
+  // F5.5 — the auto-rejected review tab (?rejected=true).
+  rejected: z.literal('true').optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
+
+// F5.5 — at least one field required; threshold clamped to 0-1.
+const qualitySettingsBodySchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    threshold: z.number().min(0).max(1).optional(),
+  })
+  .strict()
+  .refine((b) => b.enabled !== undefined || b.threshold !== undefined, {
+    message: 'enabled or threshold required',
+  });
 
 const csvEscape = (v: string | number): string => {
   const s = String(v);
@@ -111,6 +128,7 @@ const mePhotographerRoutes = async (
     const result = await listPhotographerPhotos(db, userId, {
       qualityFlag: q.data.quality_flag,
       eventId: q.data.event_id,
+      onlyRejected: q.data.rejected === 'true',
       cursor: q.data.cursor,
       limit: q.data.limit,
     });
@@ -119,6 +137,21 @@ const mePhotographerRoutes = async (
       advisory:
         'Quality flags are advisory and may include false positives. No photo is hidden automatically.',
     });
+  });
+
+  // F5.5 — quality auto-reject settings (per photographer).
+  app.get('/v1/me/photographer/quality-settings', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) return reply.code(401).send({ error: 'unauthorized' });
+    return reply.code(200).send(await getQualitySettings(db, userId));
+  });
+
+  app.patch('/v1/me/photographer/quality-settings', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) return reply.code(401).send({ error: 'unauthorized' });
+    const body = qualitySettingsBodySchema.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'invalid_request' });
+    return reply.code(200).send(await updateQualitySettings(db, userId, body.data));
   });
 };
 

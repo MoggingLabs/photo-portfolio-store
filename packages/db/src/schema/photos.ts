@@ -147,6 +147,15 @@ export const photos = app.table(
     qualityFlags: jsonb('quality_flags'),
     blurScore: numeric('blur_score', { precision: 10, scale: 2 }),
     phash: bigint('phash', { mode: 'bigint' }),
+    // F5.5 — normalized 0-1 technical-quality score (null until scored) + the
+    // photographer-controlled auto-reject. rejection_overridden_at is set when the
+    // photographer manually republishes; once set the worker never re-rejects.
+    qualityScore: numeric('quality_score', { precision: 3, scale: 2 }),
+    autoRejected: boolean('auto_rejected').notNull().default(false),
+    rejectionOverriddenAt: timestamp('rejection_overridden_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     // F3.13 dashboard surfacing.
     featured: boolean('featured').notNull().default(false),
     // Set by F3.5 takedown workflow. Non-null implies status='takedown'.
