@@ -2,16 +2,25 @@
 // calls startSchedulers() once at boot and keeps the returned handles so they
 // can be stopped on shutdown.
 
+import type { Readable } from 'node:stream';
 import {
   BayPhotoAdapter,
   ChronoTrackAdapter,
+  type CloudDownloader,
+  type CloudHttpClient,
+  type CloudProvider,
+  type CloudStorageAdapter,
+  type CloudTokenSet,
   type LabHttpClient,
   MyLapsAdapter,
+  type OAuthClientCredentials,
   type PrintLabAdapter,
   RunSignupAdapter,
   type TimingHttpClient,
   type TimingProvider,
   type TimingProviderAdapter,
+  createCloudStorageAdapter,
+  refreshAccessToken,
 } from '@pkg/integrations';
 import { Cron } from 'croner';
 import pino from 'pino';
@@ -20,7 +29,10 @@ import { request } from 'undici';
 import { db } from '../lib/db.js';
 import { workerEnv } from '../lib/env.js';
 import { qdrant } from '../lib/qdrant.js';
+import { buckets, getS3 } from '../lib/storage.js';
+import { getIngestQueue } from '../queues/index.js';
 import { runBipaRetentionDestruction } from './bipa-retention.js';
+import { runCloudImport } from './cloud-import.js';
 import { type EmailSender, runNotificationSend } from './notifications-send.js';
 import { triggerNotificationEnqueue, triggerPayoutRun } from './payouts.js';
 import {
@@ -185,6 +197,124 @@ const timingAdapterFactory: TimingAdapterFactory = (
   return null;
 };
 
+const cloudLog = pino({ name: 'cloud-import' });
+
+const lowerHeaders = (h: Record<string, string | string[] | undefined>): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(h)) {
+    out[k.toLowerCase()] = Array.isArray(v) ? v.join(', ') : String(v ?? '');
+  }
+  return out;
+};
+
+// JSON HTTP client for cloud listing/metadata + OAuth token refresh. Form-
+// encodes token requests; surfaces response headers (for Retry-After).
+const cloudHttpClient: CloudHttpClient = async (method, url, headers, body) => {
+  const isForm = headers['content-type']?.includes('x-www-form-urlencoded');
+  const encodedBody =
+    body === undefined
+      ? undefined
+      : isForm
+        ? new URLSearchParams(body as Record<string, string>).toString()
+        : JSON.stringify(body);
+  const res = await request(url, {
+    method,
+    headers,
+    ...(encodedBody !== undefined ? { body: encodedBody } : {}),
+    headersTimeout: WEBHOOK_TIMEOUT_MS,
+    bodyTimeout: WEBHOOK_TIMEOUT_MS,
+  });
+  const text = await res.body.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    /* non-JSON body; keep raw text */
+  }
+  return { status: res.statusCode, body: parsed, headers: lowerHeaders(res.headers) };
+};
+
+// Streaming downloader: returns the undici body Readable so RAW files pipe
+// straight to R2 without buffering. Body timeout disabled for large files.
+const cloudDownloader: CloudDownloader = async (method, url, headers) => {
+  const res = await request(url, {
+    method,
+    headers,
+    headersTimeout: WEBHOOK_TIMEOUT_MS,
+    bodyTimeout: 0,
+  });
+  return {
+    status: res.statusCode,
+    stream: res.body as Readable,
+    headers: lowerHeaders(res.headers),
+  };
+};
+
+// Stream a download into R2 originals via multipart Upload (no full buffering).
+const cloudUploader = async (params: {
+  key: string;
+  body: Readable;
+  contentType: string;
+}): Promise<void> => {
+  const mod = (await import('@aws-sdk/lib-storage')) as {
+    Upload: new (args: unknown) => { done: () => Promise<unknown> };
+  };
+  const upload = new mod.Upload({
+    client: getS3(),
+    params: {
+      Bucket: buckets.originals,
+      Key: params.key,
+      Body: params.body,
+      ContentType: params.contentType,
+    },
+  });
+  await upload.done();
+};
+
+const cloudOAuthCreds = (provider: CloudProvider): OAuthClientCredentials | null => {
+  if (
+    provider === 'gdrive' &&
+    workerEnv.GOOGLE_OAUTH_CLIENT_ID &&
+    workerEnv.GOOGLE_OAUTH_CLIENT_SECRET
+  ) {
+    return {
+      clientId: workerEnv.GOOGLE_OAUTH_CLIENT_ID,
+      clientSecret: workerEnv.GOOGLE_OAUTH_CLIENT_SECRET,
+      redirectUri: '',
+    };
+  }
+  if (
+    provider === 'dropbox' &&
+    workerEnv.DROPBOX_OAUTH_CLIENT_ID &&
+    workerEnv.DROPBOX_OAUTH_CLIENT_SECRET
+  ) {
+    return {
+      clientId: workerEnv.DROPBOX_OAUTH_CLIENT_ID,
+      clientSecret: workerEnv.DROPBOX_OAUTH_CLIENT_SECRET,
+      redirectUri: '',
+    };
+  }
+  return null;
+};
+
+const cloudAdapterFactory = (provider: CloudProvider, accessToken: string): CloudStorageAdapter =>
+  createCloudStorageAdapter(provider, {
+    accessToken,
+    httpClient: cloudHttpClient,
+    downloader: cloudDownloader,
+  });
+
+// Token endpoints need the app's OAuth client creds (worker env). Throws when a
+// provider is unconfigured so the import records an error instead of looping.
+const cloudRefreshToken = (
+  provider: CloudProvider,
+  refreshTokenValue: string,
+): Promise<CloudTokenSet> => {
+  const creds = cloudOAuthCreds(provider);
+  if (!creds) throw new Error(`oauth_not_configured:${provider}`);
+  return refreshAccessToken(provider, refreshTokenValue, creds, cloudHttpClient);
+};
+
 /**
  * Wire up cron jobs and return the live handles. Caller is responsible for
  * calling .stop() on each handle during graceful shutdown.
@@ -347,6 +477,29 @@ export const startSchedulers = (): Cron[] => {
     },
   );
 
+  // Cloud import sweep: every 5 minutes. Lists bound Drive/Dropbox folders and
+  // streams new files into ingest (resumable, content-hash deduped). Skipped
+  // until the master key is provisioned (tokens cannot be decrypted otherwise).
+  const cloudImportJob = new Cron(
+    '*/5 * * * *',
+    { name: 'cloud-import', protect: true },
+    async () => {
+      if (!workerEnv.INTEGRATIONS_MASTER_KEY) return;
+      try {
+        const result = await runCloudImport(db, {
+          masterKey: workerEnv.INTEGRATIONS_MASTER_KEY,
+          adapterFactory: cloudAdapterFactory,
+          refreshToken: cloudRefreshToken,
+          uploader: cloudUploader,
+          ingestQueue: getIngestQueue(),
+        });
+        if (result.importsProcessed > 0) cloudLog.info({ result }, 'cloud import sweep complete');
+      } catch (err) {
+        cloudLog.error({ err }, 'cloud import sweep failed');
+      }
+    },
+  );
+
   return [
     retentionJob,
     payoutJob,
@@ -358,5 +511,6 @@ export const startSchedulers = (): Cron[] => {
     timingJob,
     notifyEnqueueJob,
     notifySendJob,
+    cloudImportJob,
   ];
 };

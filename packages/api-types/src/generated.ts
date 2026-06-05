@@ -1220,6 +1220,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{orgId}/integrations/{provider}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                provider: components["schemas"]["CloudImportProvider"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a Drive/Dropbox OAuth connect (F4.4)
+         * @description Returns the provider authorize URL carrying a signed state. The user completes consent in the browser; the provider then redirects to the public callback, which stores the encrypted tokens.
+         */
+        post: operations["connectCloudProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{id}/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind a cloud folder to an event and queue a sync (F4.4)
+         * @description Requires a connected provider for the event's org (409 otherwise).
+         */
+        post: operations["createCloudImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{id}/imports/{importId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+                importId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        /** Cloud import progress (F4.4) */
+        get: operations["getCloudImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events/{id}/notifications/preview": {
         parameters: {
             query?: never;
@@ -1832,6 +1897,29 @@ export interface components {
             /** Format: date-time */
             lastSyncedAt: string | null;
             lastError: string | null;
+        };
+        /** @enum {string} */
+        CloudImportProvider: "gdrive" | "dropbox";
+        CloudImportCreated: {
+            importId: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "pending";
+        };
+        CloudImportProgress: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed";
+            provider: components["schemas"]["CloudImportProvider"];
+            remoteFolderId: string;
+            totalFiles: number | null;
+            importedFiles: number;
+            failedFiles: number;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            completedAt: string | null;
+            lastError: string | null;
+            etaSeconds: number | null;
         };
         /** @enum {string} */
         WebhookEventType: "order.paid" | "photos.ready_for_bib" | "event.published";
@@ -4598,6 +4686,108 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    connectCloudProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["schemas"]["Uuid"];
+                provider: components["schemas"]["CloudImportProvider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorize URL to redirect the user to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        authorizeUrl: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Cloud import is not configured on this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createCloudImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    provider: components["schemas"]["CloudImportProvider"];
+                    remoteFolderId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Import queued. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudImportCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The provider is not connected for this org. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCloudImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdParam"];
+                importId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Import progress (files-imported / total + ETA). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudImportProgress"];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

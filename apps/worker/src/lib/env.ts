@@ -30,6 +30,13 @@ export const workerEnvSchema = z.object({
   // base URL used to build them. Send sweep is skipped until the secret is set.
   GALLERY_TOKEN_SECRET: z.string().optional(),
   APP_BASE_URL: z.string().url().optional(),
+  // F4.4 — Google Drive / Dropbox OAuth client credentials. Optional: the
+  // cloud-import sweep needs them to refresh access tokens. An import for a
+  // provider whose creds are unset records an error and retries once configured.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  DROPBOX_OAUTH_CLIENT_ID: z.string().optional(),
+  DROPBOX_OAUTH_CLIENT_SECRET: z.string().optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;

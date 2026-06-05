@@ -16,6 +16,7 @@ export * as catalog from './catalog.js';
 export * as commerce from './commerce.js';
 export * as payouts from './payouts.js';
 export * as compliance from './compliance.js';
+export * as cloudImports from './cloud-imports.js';
 export * as integrations from './integrations.js';
 export * as notifications from './notifications.js';
 export * as participants from './participants.js';

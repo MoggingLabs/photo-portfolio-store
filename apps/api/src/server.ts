@@ -18,6 +18,7 @@ import authRoutes from './routes/auth.js';
 import bundlesRoutes from './routes/bundles.js';
 import cartRoutes from './routes/cart.js';
 import checkoutRoutes from './routes/checkout.js';
+import cloudImportRoutes from './routes/cloud-imports.js';
 import consentDisclosureRoutes from './routes/consent-disclosure.js';
 import consentRoutes from './routes/consents.js';
 import downloadsRoutes from './routes/downloads.js';
@@ -159,6 +160,9 @@ export const buildServer = async (): Promise<FastifyInstance> => {
   await app.register(timingRoutes);
   // M4 F4.2 — per-event SFTP provisioning (event:write, event-scoped).
   await app.register(sftpRoutes);
+  // M4 F4.4 — Google Drive / Dropbox import: OAuth connect/callback + folder
+  // binding + progress (integrations:manage + event:write; callback is public).
+  await app.register(cloudImportRoutes);
   // M4 F4.12 — "photos are ready" notifications (operator preview/resend + me).
   await app.register(notificationRoutes);
   // M4 F4.11 — outbound webhook subscriptions (integrations:manage, org-scoped).

@@ -1764,6 +1764,93 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/orgs/{orgId}/integrations/{provider}/connect:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+      - name: provider
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/CloudImportProvider' }
+    post:
+      operationId: connectCloudProvider
+      tags: [integrations]
+      summary: Start a Drive/Dropbox OAuth connect (F4.4)
+      description: >-
+        Returns the provider authorize URL carrying a signed state. The user
+        completes consent in the browser; the provider then redirects to the
+        public callback, which stores the encrypted tokens.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Authorize URL to redirect the user to.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorizeUrl]
+                properties:
+                  authorizeUrl: { type: string, format: uri }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { description: Cloud import is not configured on this deployment. }
+  # GET /v1/integrations/{provider}/callback is a public OAuth browser redirect
+  # (302) — like the signed-download redirect it is intentionally omitted from
+  # this spec (no SDK surface, no 2xx response).
+  /v1/events/{id}/imports:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      operationId: createCloudImport
+      tags: [integrations]
+      summary: Bind a cloud folder to an event and queue a sync (F4.4)
+      description: Requires a connected provider for the event's org (409 otherwise).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, remoteFolderId]
+              properties:
+                provider: { $ref: '#/components/schemas/CloudImportProvider' }
+                remoteFolderId: { type: string, minLength: 1, maxLength: 1024 }
+      responses:
+        '201':
+          description: Import queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CloudImportCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: The provider is not connected for this org. }
+  /v1/events/{id}/imports/{importId}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - name: importId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Uuid' }
+    get:
+      operationId: getCloudImport
+      tags: [integrations]
+      summary: Cloud import progress (F4.4)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Import progress (files-imported / total + ETA).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CloudImportProgress' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/events/{id}/notifications/preview:
     parameters:
       - $ref: '#/components/parameters/IdParam'
@@ -2716,6 +2803,43 @@ components:
         enabled: { type: boolean }
         lastSyncedAt: { type: string, format: date-time, nullable: true }
         lastError: { type: string, nullable: true }
+    CloudImportProvider:
+      type: string
+      enum: [gdrive, dropbox]
+    CloudImportCreated:
+      type: object
+      required: [importId, status]
+      properties:
+        importId: { $ref: '#/components/schemas/Uuid' }
+        status: { type: string, enum: [pending] }
+    CloudImportProgress:
+      type: object
+      required:
+        [
+          id,
+          status,
+          provider,
+          remoteFolderId,
+          totalFiles,
+          importedFiles,
+          failedFiles,
+          startedAt,
+          completedAt,
+          lastError,
+          etaSeconds,
+        ]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        status: { type: string, enum: [pending, running, completed, failed] }
+        provider: { $ref: '#/components/schemas/CloudImportProvider' }
+        remoteFolderId: { type: string }
+        totalFiles: { type: integer, nullable: true }
+        importedFiles: { type: integer }
+        failedFiles: { type: integer }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        lastError: { type: string, nullable: true }
+        etaSeconds: { type: integer, nullable: true }
     WebhookEventType:
       type: string
       enum: [order.paid, photos.ready_for_bib, event.published]

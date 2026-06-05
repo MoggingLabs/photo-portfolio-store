@@ -110,6 +110,9 @@ const DEFAULT_EXEMPT: ReadonlyArray<RegExp> = [
   /^\/v1\/orders\/[^/]+\/fulfillment\/poll$/,
   // M4 F4.10 — inbound print-lab webhook; public, per-lab HMAC-signature-gated.
   /^\/v1\/webhooks\/print-lab\/[^/]+$/,
+  // M4 F4.4 — cloud-import OAuth callback; public browser redirect from the
+  // provider, gated by the signed `state` param (not RBAC).
+  /^\/v1\/integrations\/[^/]+\/callback$/,
   // M2 F2.9 — Stripe Connect self-service routes; owner = request.user.
   /^\/v1\/me\/kyc\/(start|status)$/,
   // M2 F2.13 — payout dashboard self-service routes; owner = request.user.
